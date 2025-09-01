@@ -21,10 +21,21 @@
 {
   "imports": {
     "path": "https://aistudiocdn.com/path@^0.12.7",
-    "vite": "https://aistudiocdn.com/vite@^7.1.3"
+    "vite": "https://aistudiocdn.com/vite@^7.1.3",
+    "url": "https://aistudiocdn.com/url@^0.11.4"
   }
 }
 </script>
+<style>
+    .info-tooltip-icon {
+        transition: all 0.2s ease-in-out;
+    }
+    .info-tooltip-icon:hover, .info-tooltip-icon.glowing {
+        background-color: #3B82F6; /* blue-500 */
+        box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.7);
+        transform: scale(1.1);
+    }
+</style>
 </head>
 <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -743,6 +754,8 @@
             const [isCopyrightExpanded, setIsCopyrightExpanded] = useState(false);
             const [isPrivacyExpanded, setIsPrivacyExpanded] = useState(false);
             const [isTermsExpanded, setIsTermsExpanded] = useState(false);
+            const [pinnedTooltip, setPinnedTooltip] = useState(null);
+            const [hoveredTooltip, setHoveredTooltip] = useState(null);
             
             const STD_DEDUCTION_OLD = 50000;
             const STD_DEDUCTION_NEW = 75000;
@@ -750,6 +763,111 @@
 
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
+
+            // Effect to close a pinned tooltip on outside click or scroll
+            useEffect(() => {
+                const closePinnedTooltip = () => {
+                    setPinnedTooltip(null);
+                };
+                
+                if (pinnedTooltip) {
+                    // Use a timeout to prevent the same click event that opened the tooltip from immediately closing it
+                    const timerId = setTimeout(() => {
+                        document.addEventListener('click', closePinnedTooltip);
+                        window.addEventListener('scroll', closePinnedTooltip, true); // Use `true` for capture phase
+                    }, 0);
+                    return () => {
+                        clearTimeout(timerId);
+                        document.removeEventListener('click', closePinnedTooltip);
+                        window.removeEventListener('scroll', closePinnedTooltip, true);
+                    };
+                }
+            }, [pinnedTooltip]);
+
+            const InfoTooltip = ({ title, className = "" }) => {
+                const iconRef = useRef(null);
+                
+                const isPinned = pinnedTooltip && pinnedTooltip.ref === iconRef.current;
+                const isHovered = hoveredTooltip && hoveredTooltip.ref === iconRef.current;
+                const isGlowing = isPinned || isHovered;
+
+                const handleClick = (e) => {
+                    e.stopPropagation(); // Prevent click from bubbling up to the document
+                    setHoveredTooltip(null); // Always clear hover on click for cleaner state management
+
+                    if (isPinned) {
+                        setPinnedTooltip(null); // Toggle off if already pinned
+                    } else {
+                        const rect = iconRef.current.getBoundingClientRect();
+                        setPinnedTooltip({
+                            content: title,
+                            rect: rect,
+                            ref: iconRef.current
+                        });
+                    }
+                };
+
+                const handleMouseEnter = () => {
+                    const rect = iconRef.current.getBoundingClientRect();
+                    setHoveredTooltip({
+                        content: title,
+                        rect: rect,
+                        ref: iconRef.current
+                    });
+                };
+
+                const handleMouseLeave = () => {
+                    setHoveredTooltip(null);
+                };
+
+                return (
+                    <span
+                        ref={iconRef}
+                        onClick={handleClick}
+                        onMouseEnter={handleMouseEnter}
+                        onMouseLeave={handleMouseLeave}
+                        className={`info-tooltip-icon h-4 w-4 flex-shrink-0 inline-flex items-center justify-center bg-gray-400 text-white rounded-full text-xs font-bold cursor-pointer ${className} ${isGlowing ? 'glowing' : ''}`}
+                    >
+                        i
+                    </span>
+                );
+            };
+
+            const TooltipPopover = () => {
+                // Pinned tooltip takes precedence. If none is pinned, show the hovered one.
+                const activeTooltip = pinnedTooltip || hoveredTooltip;
+                if (!activeTooltip) return null;
+
+                const iconRect = activeTooltip.rect;
+                const popoverWidth = Math.min(320, window.innerWidth - 32);
+                
+                let top = iconRect.bottom + 8; // Position below the icon
+                let left = iconRect.left + (iconRect.width / 2) - (popoverWidth / 2); // Center align
+
+                // Prevent overflow
+                if (left < 16) {
+                    left = 16;
+                } else if ((left + popoverWidth) > (window.innerWidth - 16)) {
+                    left = window.innerWidth - 16 - popoverWidth;
+                }
+
+                const style = {
+                    top: `${top}px`,
+                    left: `${left}px`,
+                    width: `${popoverWidth}px`,
+                };
+
+                return (
+                    <div
+                        className="fixed z-[100] p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg"
+                        style={style}
+                        onClick={e => e.stopPropagation()} // Prevent closing when clicking inside the tooltip
+                    >
+                         <div dangerouslySetInnerHTML={{ __html: activeTooltip.content.replace(/\n/g, '<br />') }} />
+                    </div>
+                );
+            };
+
 
             // Load from localStorage
             useEffect(() => {
@@ -1409,12 +1527,6 @@
                 }
             };
             
-            const infoTooltip = (title) => (
-                <span className="ml-2 h-4 w-4 flex-shrink-0 inline-flex items-center justify-center bg-gray-400 text-white rounded-full text-xs font-bold cursor-help" title={title}>
-                    i
-                </span>
-            );
-            
             const sopCount = useMemo(() => properties.filter(p => p.type === 'sop').length, [properties]);
 
             const ded80CNum = Number(ded80C) || 0;
@@ -1559,6 +1671,7 @@
 
             return (
               <div className="min-h-screen bg-gray-100 text-gray-900 transition-colors duration-300">
+                <TooltipPopover />
                 <AgriTaxModal />
                 <div className="container mx-auto p-4 sm:p-6 lg:p-8">
                     <header className="text-center mb-6 relative">
@@ -1605,14 +1718,14 @@
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('otherIncomeLabel')}
-                                                {infoTooltip(t('otherIncomeTooltip'))}
+                                                <InfoTooltip title={t('otherIncomeTooltip')} className="ml-2" />
                                             </label>
                                             <input type="text" inputMode="numeric" pattern="\d*" value={otherIncome} onChange={handleNumericStringChange(setOtherIncome)} onBlur={handleBlur(setOtherIncome)} onFocus={handleFocus} className={inputClass} />
                                         </div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('agriculturalIncomeLabel')}
-                                                {infoTooltip(t('agriculturalIncomeTooltip'))}
+                                                <InfoTooltip title={t('agriculturalIncomeTooltip')} className="ml-2" />
                                             </label>
                                             <input type="text" inputMode="numeric" pattern="\d*" value={agriculturalIncome} onChange={handleNumericStringChange(setAgriculturalIncome)} onBlur={handleBlur(setAgriculturalIncome)} onFocus={handleFocus} className={inputClass} />
                                             <p className="text-xs text-gray-500 mt-1">{t('agriculturalIncomeNote')}</p>
@@ -1639,14 +1752,14 @@
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('ltcgLabel')}
-                                                {infoTooltip(t('ltcgTooltip'))}
+                                                <InfoTooltip title={t('ltcgTooltip')} className="ml-2" />
                                             </label>
                                             <input type="text" inputMode="numeric" pattern="\d*" value={ltcg} onChange={handleNumericStringChange(setLtcg)} onBlur={handleBlur(setLtcg)} onFocus={handleFocus} className={inputClass} />
                                         </div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('stcgLabel')}
-                                                {infoTooltip(t('stcgTooltip'))}
+                                                <InfoTooltip title={t('stcgTooltip')} className="ml-2" />
                                             </label>
                                             <input type="text" inputMode="numeric" pattern="\d*" value={stcg} onChange={handleNumericStringChange(setStcg)} onBlur={handleBlur(setStcg)} onFocus={handleFocus} className={inputClass} />
                                         </div>
@@ -1654,7 +1767,7 @@
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('taxableGiftsLabel')}
-                                                {infoTooltip(t('taxableGiftsTooltip'))}
+                                                <InfoTooltip title={t('taxableGiftsTooltip')} className="ml-2" />
                                             </label>
                                             <input type="text" inputMode="numeric" pattern="\d*" value={taxableGifts} onChange={handleNumericStringChange(setTaxableGifts)} onBlur={handleBlur(setTaxableGifts)} onFocus={handleFocus} className={inputClass} />
                                             <p className="text-xs text-gray-500 mt-1">{t('taxableGiftsNote')}</p>
@@ -1732,7 +1845,7 @@
                                     <div>
                                         <label className="flex items-center text-sm font-medium mb-1">
                                           {t('npsIndividualContributionLabel')}
-                                          {infoTooltip(t('npsIndividualContributionTooltip'))}
+                                          <InfoTooltip title={t('npsIndividualContributionTooltip')} className="ml-2" />
                                         </label>
                                         <p className="text-xs text-gray-500 mb-1">{t('npsIndividualContributionHint')}</p>
                                         <input type="text" inputMode="numeric" pattern="\d*" value={ded80CCD1} onChange={handleNumericStringChange(setDed80CCD1, remaining80CCD1_limit)} onBlur={handleBlur(setDed80CCD1)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/>
@@ -1902,19 +2015,19 @@
                                                                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg grid sm:grid-cols-2 gap-4">
                                                                         <h5 className="sm:col-span-2 text-md font-semibold text-gray-700 -mb-2">{t('detailedGAVTitle')}</h5>
                                                                          <div>
-                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('municipalValueLabel')} {infoTooltip(t('municipalValueTooltip'))}</label>
+                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('municipalValueLabel')} <InfoTooltip title={t('municipalValueTooltip')} className="ml-2" /></label>
                                                                             <input type="text" inputMode="numeric" pattern="\d*" value={prop.municipalValue} onChange={e => updateProperty(prop.id, { municipalValue: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { municipalValue: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                                          </div>
                                                                          <div>
-                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('fairRentLabel')} {infoTooltip(t('fairRentTooltip'))}</label>
+                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('fairRentLabel')} <InfoTooltip title={t('fairRentTooltip')} className="ml-2" /></label>
                                                                             <input type="text" inputMode="numeric" pattern="\d*" value={prop.fairRent} onChange={e => updateProperty(prop.id, { fairRent: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { fairRent: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                                          </div>
                                                                          <div>
-                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('standardRentLabel')} {infoTooltip(t('standardRentTooltip'))}</label>
+                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('standardRentLabel')} <InfoTooltip title={t('standardRentTooltip')} className="ml-2" /></label>
                                                                             <input type="text" inputMode="numeric" pattern="\d*" value={prop.standardRent} onChange={e => updateProperty(prop.id, { standardRent: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { standardRent: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                                          </div>
                                                                          <div>
-                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('actualRentLabel')} {infoTooltip(t('actualRentTooltip'))}</label>
+                                                                            <label className="flex items-center text-sm font-medium mb-1">{t('actualRentLabel')} <InfoTooltip title={t('actualRentTooltip')} className="ml-2" /></label>
                                                                             <input type="text" inputMode="numeric" pattern="\d*" value={prop.actualRent} onChange={e => updateProperty(prop.id, { actualRent: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { actualRent: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                                          </div>
                                                                     </div>
@@ -1948,12 +2061,12 @@
                                                                 </>
                                                             ) : (
                                                                 <div>
-                                                                    <label className="flex items-center text-sm font-medium mb-1">{t('gavLabel')} {infoTooltip(t('gavTooltip'))}</label>
+                                                                    <label className="flex items-center text-sm font-medium mb-1">{t('gavLabel')} <InfoTooltip title={t('gavTooltip')} className="ml-2" /></label>
                                                                     <input type="text" inputMode="numeric" pattern="\d*" value={prop.gav} onChange={e => updateProperty(prop.id, { gav: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { gav: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                                 </div>
                                                             )}
                                                              <div>
-                                                                <label className="flex items-center text-sm font-medium mb-1">{t('municipalTaxesLabel')} {infoTooltip(t('municipalTaxesTooltip'))}</label>
+                                                                <label className="flex items-center text-sm font-medium mb-1">{t('municipalTaxesLabel')} <InfoTooltip title={t('municipalTaxesTooltip')} className="ml-2" /></label>
                                                                 <input type="text" inputMode="numeric" pattern="\d*" value={prop.municipalTaxes} onChange={e => updateProperty(prop.id, { municipalTaxes: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { municipalTaxes: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                             </div>
                                                         </div>
@@ -1965,7 +2078,7 @@
                                                                 <input type="text" inputMode="numeric" pattern="\d*" value={prop.interestOnLoanLOP} onChange={e => updateProperty(prop.id, { interestOnLoanLOP: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { interestOnLoanLOP: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                             </div>
                                                              <div>
-                                                                <label className="flex items-center text-sm font-medium mb-1">{t('preConInterestLabel')} {infoTooltip(t('preConInterestTooltipLOP'))}</label>
+                                                                <label className="flex items-center text-sm font-medium mb-1">{t('preConInterestLabel')} <InfoTooltip title={t('preConInterestTooltipLOP')} className="ml-2" /></label>
                                                                  <p className="text-xs text-gray-500 mb-1">{t('preConInterestHint')}</p>
                                                                 <input type="text" inputMode="numeric" pattern="\d*" value={prop.preConstructionInterest} onChange={e => updateProperty(prop.id, { preConstructionInterest: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { preConstructionInterest: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                                             </div>
@@ -1984,7 +2097,7 @@
                                                             </div>
                                                         </div>
                                                         <div>
-                                                            <label className="flex items-center text-sm font-medium mb-1">{t('preConInterestLabel')} {infoTooltip(t('preConInterestTooltipSOP'))}</label>
+                                                            <label className="flex items-center text-sm font-medium mb-1">{t('preConInterestLabel')} <InfoTooltip title={t('preConInterestTooltipSOP')} className="ml-2" /></label>
                                                              <p className="text-xs text-gray-500 mb-1">{t('sopPreConInterestHint')}</p>
                                                             <input type="text" inputMode="numeric" pattern="\d*" value={prop.preConstructionInterest} onChange={e => handleSOPPreConInterestChange(prop.id, e.target.value)} onBlur={e => e.target.value === '' && updateProperty(prop.id, { preConstructionInterest: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive || prop.loanTypeSOP === 'repair'} />
                                                             {prop.loanTypeSOP === 'purchase' && (
@@ -2008,7 +2121,7 @@
                                     </button>
                                     <hr className="my-2" />
                                     <div>
-                                        <label className="flex items-center text-sm font-medium mb-1">{t('broughtForwardLossLabel')} {infoTooltip(t('broughtForwardLossTooltip'))}</label>
+                                        <label className="flex items-center text-sm font-medium mb-1">{t('broughtForwardLossLabel')} <InfoTooltip title={t('broughtForwardLossTooltip')} className="ml-2" /></label>
                                         <p className="text-xs text-gray-500 mb-1">{t('broughtForwardLossHint')}</p>
                                         <input type="text" inputMode="numeric" pattern="\d*" value={broughtForwardLossHP} onChange={handleNumericStringChange(setBroughtForwardLossHP)} onBlur={handleBlur(setBroughtForwardLossHP)} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
                                     </div>
@@ -2083,7 +2196,7 @@
                             <div className={cardClass}>
                                 <h3 className="text-xl font-semibold mb-4 border-b pb-2 flex items-center">
                                     {t('agniveerTitle')}
-                                    {infoTooltip(t('agniveerTooltip'))}
+                                    <InfoTooltip title={t('agniveerTooltip')} className="ml-2" />
                                 </h3>
                                 <div className="grid sm:grid-cols-2 gap-4">
                                     <div>
@@ -2445,7 +2558,7 @@
                                                         {results.isSalaried && results.npsEmployerApplied === 0 && results.totalTaxNew > 0 && (
                                                             <li>
                                                                 <span dangerouslySetInnerHTML={{ __html: t('oppsNPSNewRegimeTitle') }} />
-                                                                {infoTooltip(t('oppsNPSNewRegimeTooltip'))}
+                                                                <InfoTooltip title={t('oppsNPSNewRegimeTooltip')} className="ml-2" />
                                                                 <p className="text-xs text-gray-500 mt-1 pl-5">{t('oppsNPSNewRegimeNote')}</p>
                                                             </li>
                                                         )}
@@ -2467,15 +2580,7 @@
                             <div className={cardClass}>
                                 <div className="flex items-center gap-2 mb-4">
                                     <h3 className="text-xl font-semibold">{t('totalTaxComparisonTitle')}</h3>
-                                    <div className="relative group">
-                                        <span className="flex items-center justify-center h-4 w-4 bg-gray-400 text-white rounded-full text-xs font-bold cursor-help">
-                                            i
-                                        </span>
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 p-3 bg-gray-700 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-300 pointer-events-none z-10">
-                                            <p dangerouslySetInnerHTML={{ __html: t('insightTooltip') }} />
-                                            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-gray-700"></div>
-                                        </div>
-                                    </div>
+                                    <InfoTooltip title={t('insightTooltip')} />
                                 </div>
 
                                 {grossIncome > 0 && (
