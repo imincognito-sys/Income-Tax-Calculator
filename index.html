@@ -32,7 +32,9 @@
     }
     .info-tooltip-icon:hover, .info-tooltip-icon.glowing {
         background-color: #3B82F6; /* blue-500 */
+        -webkit-box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.7);
         box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.7);
+        -webkit-transform: scale(1.1);
         transform: scale(1.1);
     }
 </style>
@@ -763,26 +765,47 @@
 
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
+            const popoverRef = useRef(null); // Ref for the tooltip popover element
 
-            // Effect to close a pinned tooltip on outside click or scroll
+            // Effect to close any active tooltip on outside click or scroll
             useEffect(() => {
-                const closePinnedTooltip = () => {
+                const activeTooltip = pinnedTooltip || hoveredTooltip;
+                if (!activeTooltip) {
+                    return; // No tooltip is active, so no listeners needed.
+                }
+
+                const handleOutsideInteraction = (event) => {
+                    const iconNode = activeTooltip.ref;
+                    const popoverNode = popoverRef.current;
+
+                    // Check if the click/tap was inside the icon or the popover itself
+                    if (iconNode?.contains(event.target) || popoverNode?.contains(event.target)) {
+                        return; // Interaction was inside, do nothing.
+                    }
+
+                    // Interaction was outside, so close the tooltips.
                     setPinnedTooltip(null);
+                    setHoveredTooltip(null);
                 };
                 
-                if (pinnedTooltip) {
-                    // Use a timeout to prevent the same click event that opened the tooltip from immediately closing it
-                    const timerId = setTimeout(() => {
-                        document.addEventListener('click', closePinnedTooltip);
-                        window.addEventListener('scroll', closePinnedTooltip, true); // Use `true` for capture phase
-                    }, 0);
-                    return () => {
-                        clearTimeout(timerId);
-                        document.removeEventListener('click', closePinnedTooltip);
-                        window.removeEventListener('scroll', closePinnedTooltip, true);
-                    };
-                }
-            }, [pinnedTooltip]);
+                const handleScroll = () => {
+                    setPinnedTooltip(null);
+                    setHoveredTooltip(null);
+                };
+                
+                // Add event listeners
+                document.addEventListener('mousedown', handleOutsideInteraction);
+                document.addEventListener('touchstart', handleOutsideInteraction);
+                window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+
+                // Cleanup function to remove listeners
+                return () => {
+                    document.removeEventListener('mousedown', handleOutsideInteraction);
+                    document.removeEventListener('touchstart', handleOutsideInteraction);
+                    window.removeEventListener('scroll', handleScroll, { capture: true });
+                };
+            }, [pinnedTooltip, hoveredTooltip]); // Rerun this effect if the active tooltip changes
+
 
             const InfoTooltip = ({ title, className = "" }) => {
                 const iconRef = useRef(null);
@@ -791,8 +814,7 @@
                 const isHovered = hoveredTooltip && hoveredTooltip.ref === iconRef.current;
                 const isGlowing = isPinned || isHovered;
 
-                const handleClick = (e) => {
-                    e.stopPropagation(); // Prevent click from bubbling up to the document
+                const handleClick = () => {
                     setHoveredTooltip(null); // Always clear hover on click for cleaner state management
 
                     if (isPinned) {
@@ -808,6 +830,7 @@
                 };
 
                 const handleMouseEnter = () => {
+                    if (pinnedTooltip) return; // Don't show hover tooltip if one is already pinned
                     const rect = iconRef.current.getBoundingClientRect();
                     setHoveredTooltip({
                         content: title,
@@ -856,12 +879,12 @@
                     left: `${left}px`,
                     width: `${popoverWidth}px`,
                 };
-
+                
                 return (
                     <div
+                        ref={popoverRef}
                         className="fixed z-[100] p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg"
                         style={style}
-                        onClick={e => e.stopPropagation()} // Prevent closing when clicking inside the tooltip
                     >
                          <div dangerouslySetInnerHTML={{ __html: activeTooltip.content.replace(/\n/g, '<br />') }} />
                     </div>
