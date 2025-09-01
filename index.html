@@ -367,6 +367,41 @@
             surchargeOldCol: "Surcharge (Old Regime)",
             surchargeNewCol: "Surcharge (New Regime)",
             surchargeNote: "The surcharge on tax payable on dividend income and certain capital gains is capped at 15%. This calculator applies the general slab rates for simplification.",
+            cryptoTaxSummaryTitle: "Summary of Crypto Taxation (TDS & Income Tax)",
+            toggleCryptoTdsTable: "{toggle} Details",
+            cryptoMergedTransactionCol: "Type of Transaction",
+            cryptoMergedTdsCol: "TDS (u/s 194S)",
+            cryptoMergedIncomeTaxCol: "Income Tax on Gains/Income",
+            cryptoMergedNotesCol: "Notes / Person Responsible",
+            cryptoMergedRow1Type: "Buying Crypto (with INR)",
+            cryptoMergedRow1Tds: "1% on gross value",
+            cryptoMergedRow1Tax: "N/A for buyer",
+            cryptoMergedRow1Notes: "<strong>Buyer</strong> deducts TDS. For Indian exchanges, it's automatic. For P2P/foreign exchanges, the buyer must do it manually.",
+            cryptoMergedRow2Type: "Selling Crypto",
+            cryptoMergedRow2Tds: "1% TDS is deducted by the buyer/exchange",
+            cryptoMergedRow2Tax: "<strong>30% flat tax</strong> on any capital gains",
+            cryptoMergedRow2Notes: "No deductions are allowed except the cost of acquisition.",
+            cryptoMergedRow3Type: "Trading Crypto for Crypto",
+            cryptoMergedRow3Tds: "<strong>1% each</strong> (by both parties)",
+            cryptoMergedRow3Tax: "<strong>30% flat tax</strong> on any gains",
+            cryptoMergedRow3Notes: "Both parties must handle their own TDS filings.",
+            cryptoMergedRow4Type: "Receiving (Airdrops, Mining, Staking)",
+            cryptoMergedRow4Tds: "TDS may apply",
+            cryptoMergedRow4Tax: "Taxed at your <strong>applicable slab rate</strong> upon receipt",
+            cryptoMergedRow4Notes: "If sold later, any further gains are taxed at 30%.",
+            cryptoMergedRow5Type: "Gifting Crypto",
+            cryptoMergedRow5Tds: "N/A",
+            cryptoMergedRow5Tax: "Recipient taxed at <strong>slab rate</strong> if value > ₹50,000",
+            cryptoMergedRow5Notes: "Exemptions for gifts from close family apply.",
+            cryptoMergedRow6Type: "Holding / Moving Crypto",
+            cryptoMergedRow6Tds: "N/A",
+            cryptoMergedRow6Tax: "Tax-free",
+            cryptoMergedRow6Notes: "Tax applies only upon sale/disposal. Keep good records.",
+            cryptoTdsNotesTitle: "Key Takeaways:",
+            cryptoTdsNote1: "TDS is deducted by the buyer at the time of payment for the transfer of a Virtual Digital Asset (VDA).",
+            cryptoTdsNote2: "The 1% TDS is applicable on the <strong>gross consideration</strong> (total sale value), not on the net profit.",
+            cryptoTdsNote3: "This TDS amount can be claimed as a credit against your final tax liability when you file your income tax return.",
+            cryptoTdsNote4: "This is separate from the <strong>flat 30% tax</strong> levied on any income from the transfer of VDAs. No deductions (except cost of acquisition) or loss set-offs are allowed against VDA income.",
             slabOldRow1: "Up to 2,50,000",
             slabOldRow2: "2,50,001 - 3,00,000",
             slabOldRow3: "3,00,001 - 5,00,000",
@@ -785,6 +820,7 @@
             const [showNewTaxBreakdown, setShowNewTaxBreakdown] = useState(false);
             const [showTaxSlabs, setShowTaxSlabs] = useState(false);
             const [showSurchargeRates, setShowSurchargeRates] = useState(false);
+            const [showCryptoTds, setShowCryptoTds] = useState(false);
             const [showAgriTaxHelpModal, setShowAgriTaxHelpModal] = useState(false);
             const [showAgriStep1Breakdown, setShowAgriStep1Breakdown] = useState(false);
             const [showAgriStep2Breakdown, setShowAgriStep2Breakdown] = useState(false);
@@ -2909,6 +2945,80 @@
                                         </div>
                                         <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-700">
                                             <p><strong className="font-semibold">{t('surchargeNotesTitle')}</strong> {t('surchargeNote')}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className={cardClass}>
+                                <h3 className="text-xl font-semibold mb-2">{t('cryptoTaxSummaryTitle')}</h3>
+                                <button
+                                    onClick={() => setShowCryptoTds(!showCryptoTds)}
+                                    className="w-full text-blue-600 hover:text-blue-800 font-semibold py-2 px-4 border border-blue-500 rounded hover:bg-blue-50 transition-colors"
+                                    aria-expanded={showCryptoTds}
+                                >
+                                    {t('toggleCryptoTdsTable', {toggle: showCryptoTds ? t('hide') : t('show')})}
+                                </button>
+                                {showCryptoTds && (
+                                    <div className="mt-4 space-y-4">
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-gray-200 border">
+                                                <thead className="bg-blue-50">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('cryptoMergedTransactionCol')}</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('cryptoMergedTdsCol')}</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('cryptoMergedIncomeTaxCol')}</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('cryptoMergedNotesCol')}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                                                    <tr>
+                                                        <td className="px-4 py-2 font-semibold" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow1Type') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow1Tds') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow1Tax') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow1Notes') }} />
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="px-4 py-2 font-semibold" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow2Type') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow2Tds') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow2Tax') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow2Notes') }} />
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="px-4 py-2 font-semibold" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow3Type') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow3Tds') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow3Tax') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow3Notes') }} />
+                                                    </tr>
+                                                     <tr>
+                                                        <td className="px-4 py-2 font-semibold" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow4Type') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow4Tds') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow4Tax') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow4Notes') }} />
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="px-4 py-2 font-semibold" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow5Type') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow5Tds') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow5Tax') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow5Notes') }} />
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="px-4 py-2 font-semibold" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow6Type') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow6Tds') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow6Tax') }} />
+                                                        <td className="px-4 py-2" dangerouslySetInnerHTML={{ __html: t('cryptoMergedRow6Notes') }} />
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-700">
+                                            <p><strong className="font-semibold">{t('cryptoTdsNotesTitle')}</strong></p>
+                                            <ul className="list-disc list-inside mt-1 space-y-1">
+                                                <li dangerouslySetInnerHTML={{__html: t('cryptoTdsNote1')}}/>
+                                                <li dangerouslySetInnerHTML={{__html: t('cryptoTdsNote2')}}/>
+                                                <li dangerouslySetInnerHTML={{__html: t('cryptoTdsNote3')}}/>
+                                                <li dangerouslySetInnerHTML={{__html: t('cryptoTdsNote4')}}/>
+                                            </ul>
                                         </div>
                                     </div>
                                 )}
