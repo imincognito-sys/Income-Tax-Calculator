@@ -32,10 +32,25 @@
     }
     .info-tooltip-icon:hover, .info-tooltip-icon.glowing {
         background-color: #3B82F6; /* blue-500 */
-        -webkit-box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.7);
         box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.7);
-        -webkit-transform: scale(1.1);
         transform: scale(1.1);
+    }
+    
+    @keyframes rotate-border {
+      to { --angle: 360deg; }
+    }
+
+    @property --angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+
+    .input-glowing {
+      --angle: 0deg;
+      border: 2px solid;
+      border-image: conic-gradient(from var(--angle), #4285F4, #DB4437, #F4B400, #0F9D58, #4285F4) 1;
+      animation: rotate-border 4s linear infinite;
     }
 </style>
 </head>
@@ -758,6 +773,7 @@
             const [isTermsExpanded, setIsTermsExpanded] = useState(false);
             const [pinnedTooltip, setPinnedTooltip] = useState(null);
             const [hoveredTooltip, setHoveredTooltip] = useState(null);
+            const [glowingInputs, setGlowingInputs] = useState(new Set());
             
             const STD_DEDUCTION_OLD = 50000;
             const STD_DEDUCTION_NEW = 75000;
@@ -765,46 +781,32 @@
 
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
-            const popoverRef = useRef(null); // Ref for the tooltip popover element
 
             // Effect to close any active tooltip on outside click or scroll
             useEffect(() => {
-                const activeTooltip = pinnedTooltip || hoveredTooltip;
-                if (!activeTooltip) {
-                    return; // No tooltip is active, so no listeners needed.
+                const closeAnyTooltip = () => {
+                    setPinnedTooltip(null);
+                    setHoveredTooltip(null);
+                };
+
+                // If any tooltip is active, set up global listeners to close it.
+                if (pinnedTooltip || hoveredTooltip) {
+                    // Use a timeout to prevent the same event that opened the tooltip from immediately closing it.
+                    const timerId = setTimeout(() => {
+                        document.addEventListener('mousedown', closeAnyTooltip);
+                        document.addEventListener('touchstart', closeAnyTooltip);
+                        window.addEventListener('scroll', closeAnyTooltip, { capture: true, passive: true });
+                    }, 0);
+
+                    // Cleanup function to remove listeners
+                    return () => {
+                        clearTimeout(timerId);
+                        document.removeEventListener('mousedown', closeAnyTooltip);
+                        document.removeEventListener('touchstart', closeAnyTooltip);
+                        window.removeEventListener('scroll', closeAnyTooltip, { capture: true });
+                    };
                 }
-
-                const handleOutsideInteraction = (event) => {
-                    const iconNode = activeTooltip.ref;
-                    const popoverNode = popoverRef.current;
-
-                    // Check if the click/tap was inside the icon or the popover itself
-                    if (iconNode?.contains(event.target) || popoverNode?.contains(event.target)) {
-                        return; // Interaction was inside, do nothing.
-                    }
-
-                    // Interaction was outside, so close the tooltips.
-                    setPinnedTooltip(null);
-                    setHoveredTooltip(null);
-                };
-                
-                const handleScroll = () => {
-                    setPinnedTooltip(null);
-                    setHoveredTooltip(null);
-                };
-                
-                // Add event listeners
-                document.addEventListener('mousedown', handleOutsideInteraction);
-                document.addEventListener('touchstart', handleOutsideInteraction);
-                window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
-
-                // Cleanup function to remove listeners
-                return () => {
-                    document.removeEventListener('mousedown', handleOutsideInteraction);
-                    document.removeEventListener('touchstart', handleOutsideInteraction);
-                    window.removeEventListener('scroll', handleScroll, { capture: true });
-                };
-            }, [pinnedTooltip, hoveredTooltip]); // Rerun this effect if the active tooltip changes
+            }, [pinnedTooltip, hoveredTooltip]);
 
 
             const InfoTooltip = ({ title, className = "" }) => {
@@ -830,7 +832,6 @@
                 };
 
                 const handleMouseEnter = () => {
-                    if (pinnedTooltip) return; // Don't show hover tooltip if one is already pinned
                     const rect = iconRef.current.getBoundingClientRect();
                     setHoveredTooltip({
                         content: title,
@@ -843,10 +844,14 @@
                     setHoveredTooltip(null);
                 };
 
+                const stopPropagation = (e) => e.stopPropagation();
+
                 return (
                     <span
                         ref={iconRef}
                         onClick={handleClick}
+                        onMouseDown={stopPropagation}
+                        onTouchStart={stopPropagation}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
                         className={`info-tooltip-icon h-4 w-4 flex-shrink-0 inline-flex items-center justify-center bg-gray-400 text-white rounded-full text-xs font-bold cursor-pointer ${className} ${isGlowing ? 'glowing' : ''}`}
@@ -880,11 +885,14 @@
                     width: `${popoverWidth}px`,
                 };
                 
+                const stopPropagation = (e) => e.stopPropagation();
+
                 return (
                     <div
-                        ref={popoverRef}
                         className="fixed z-[100] p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg"
                         style={style}
+                        onMouseDown={stopPropagation}
+                        onTouchStart={stopPropagation}
                     >
                          <div dangerouslySetInnerHTML={{ __html: activeTooltip.content.replace(/\n/g, '<br />') }} />
                     </div>
@@ -945,6 +953,34 @@
                     setAdvanceTax(String(d.advanceTax || '0'));
                     setAgeBand(d.ageBand || "below60");
                     setPresumptive(typeof d.presumptive === 'boolean' ? d.presumptive : false);
+
+                    // Set initial glowing inputs based on loaded data
+                    const inputMap = {
+                        salary: d.salary, business: d.business, interest: d.interest, dividend: d.dividend,
+                        otherIncome: d.otherIncome, agriculturalIncome: d.agriculturalIncome, taxableGifts: d.taxableGifts,
+                        ltcg: d.ltcg, stcg: d.stcg, cryptoGains: d.cryptoGains, basicSalary: d.basicSalary,
+                        da: d.da, hraReceived: d.hraReceived, ltaReceived: d.ltaReceived, specialAllowance: d.specialAllowance,
+                        bonus: d.bonus, rentPaid: d.rentPaid, ltaActualExpenses: d.ltaActualExpenses,
+                        professionalTax: d.professionalTax, broughtForwardLossHP: d.broughtForwardLossHP, ded80C: d.ded80C,
+                        ded80CCD1: d.ded80CCD1, ded80D: d.ded80D, ded80G: d.ded80G, ded80TTA: d.ded80TTA,
+                        nps80CCD1B: d.nps80CCD1B, npsEmployer: d.npsEmployer, ded80E: d.ded80E, ded80GG: d.ded80GG,
+                        ded80DDB: d.ded80DDB, agniveerContribution: d.agniveerContribution,
+                        govtAgniveerContribution: d.govtAgniveerContribution, tds: d.tds, tcs: d.tcs, advanceTax: d.advanceTax,
+                    };
+                    const newGlowingSet = new Set();
+                    for (const [id, value] of Object.entries(inputMap)) {
+                        if (Number(value || '0') > 0) newGlowingSet.add(id);
+                    }
+                    if (d.properties && d.properties.length > 0) {
+                        d.properties.forEach((prop) => {
+                            const propFields = ['gav', 'municipalValue', 'fairRent', 'standardRent', 'actualRent', 'municipalTaxes', 'interestOnLoanLOP', 'interestOnLoanSOP', 'preConstructionInterest'];
+                            propFields.forEach(field => {
+                                if (Number(prop[field] || '0') > 0) newGlowingSet.add(`prop-${prop.id}-${field}`);
+                            });
+                        });
+                    }
+                    setGlowingInputs(newGlowingSet);
+
                 } catch (e) {
                     console.error("Failed to load state from localStorage", e);
                 }
@@ -980,31 +1016,49 @@
                 e.target.select();
             };
 
-            const handleNumericStringChange = (setter, max) => (e) => {
+            const handleGlow = (id, value) => {
+                 setGlowingInputs(prev => {
+                    const newSet = new Set(prev);
+                    if (Number(value || '0') > 0) {
+                        newSet.add(id);
+                    } else {
+                        newSet.delete(id);
+                    }
+                    return newSet;
+                });
+            };
+
+            const handleNumericStringChange = (setter, id, max) => (e) => {
                 const value = e.target.value;
                 if (/^\d*$/.test(value)) { // Only allow digits
                     if (max !== undefined) {
                         const numValue = Number(value);
                         if (numValue <= max) {
                             setter(value);
+                            handleGlow(id, value);
                         }
                     } else {
                         setter(value);
+                        handleGlow(id, value);
                     }
                 }
             };
             
-            const handleBlur = (setter) => (e) => {
+            const handleBlur = (setter, id) => (e) => {
                 if (e.target.value.trim() === '') {
                     setter('0');
+                    handleGlow(id, '0');
                 }
             };
 
             const handleSalaryChange = (e) => {
                 const value = e.target.value;
+                const id = e.target.id;
                 if (!/^\d*$/.test(value)) return;
 
                 setSalary(value);
+                handleGlow(id, value);
+
                 const newSalary = Number(value || '0');
 
                 if (newSalary > 0) {
@@ -1014,19 +1068,19 @@
                     const remaining = newSalary - newBasic - newHra - newLta;
                     const newSpecial = Math.max(0, remaining);
 
-                    setBasicSalary(String(newBasic));
-                    setDa('0');
-                    setHraReceived(String(newHra));
-                    setLtaReceived(String(newLta));
-                    setSpecialAllowance(String(newSpecial));
-                    setBonus('0');
+                    setBasicSalary(String(newBasic)); handleGlow('basicSalary', newBasic);
+                    setDa('0'); handleGlow('da', '0');
+                    setHraReceived(String(newHra)); handleGlow('hraReceived', newHra);
+                    setLtaReceived(String(newLta)); handleGlow('ltaReceived', newLta);
+                    setSpecialAllowance(String(newSpecial)); handleGlow('specialAllowance', newSpecial);
+                    setBonus('0'); handleGlow('bonus', '0');
                 } else {
-                    setBasicSalary('0');
-                    setDa('0');
-                    setHraReceived('0');
-                    setLtaReceived('0');
-                    setSpecialAllowance('0');
-                    setBonus('0');
+                    setBasicSalary('0'); handleGlow('basicSalary', '0');
+                    setDa('0'); handleGlow('da', '0');
+                    setHraReceived('0'); handleGlow('hraReceived', '0');
+                    setLtaReceived('0'); handleGlow('ltaReceived', '0');
+                    setSpecialAllowance('0'); handleGlow('specialAllowance', '0');
+                    setBonus('0'); handleGlow('bonus', '0');
                 }
             };
             
@@ -1039,11 +1093,21 @@
             const updateProperty = (id, updatedValues) => {
                 setProperties(properties.map(p => p.id === id ? { ...p, ...updatedValues } : p));
             };
+
+            const handlePropertyChange = (id, field, value) => {
+                 if (!/^\d*$/.test(value)) return;
+                 updateProperty(id, { [field]: value });
+                 handleGlow(`prop-${id}-${field}`, value);
+            };
             
-            const handleSOPInterestChange = (id, value) => {
+            const handleSOPInterestChange = (propId, e) => {
+                const value = e.target.value;
+                const inputId = e.target.id;
                 if (!/^\d*$/.test(value)) return;
 
-                const prop = properties.find(p => p.id === id);
+                handleGlow(inputId, value);
+
+                const prop = properties.find(p => p.id === propId);
                 if (!prop || prop.type !== 'sop') return;
 
                 const cap = prop.loanTypeSOP === 'purchase' ? 200000 : 30000;
@@ -1055,18 +1119,21 @@
                 let updatedPreConInterest = preConInterestNum;
                 if (cappedInterest + preConInterestNum > cap) {
                     updatedPreConInterest = cap - cappedInterest;
+                    handleGlow(`prop-${propId}-preConstructionInterest`, updatedPreConInterest);
                 }
                 
-                updateProperty(id, { 
+                updateProperty(propId, { 
                     interestOnLoanSOP: String(cappedInterest),
                     preConstructionInterest: String(updatedPreConInterest)
                 });
             };
 
-            const handleSOPPreConInterestChange = (id, value) => {
+            const handleSOPPreConInterestChange = (propId, e) => {
+                const value = e.target.value;
+                const inputId = e.target.id;
                 if (!/^\d*$/.test(value)) return;
                 
-                const prop = properties.find(p => p.id === id);
+                const prop = properties.find(p => p.id === propId);
                 if (!prop || prop.type !== 'sop') return;
 
                 const cap = prop.loanTypeSOP === 'purchase' ? 200000 : 30000;
@@ -1076,7 +1143,8 @@
                 const numValue = Number(value);
                 const cappedPreConInterest = Math.min(numValue, remainingAllowance);
 
-                updateProperty(id, { preConstructionInterest: String(cappedPreConInterest) });
+                handleGlow(inputId, cappedPreConInterest);
+                updateProperty(propId, { preConstructionInterest: String(cappedPreConInterest) });
             };
 
             const grossIncome = useMemo(() => 
@@ -1537,16 +1605,20 @@
             const handle80GGCheckboxChange = (e) => {
                 if (e.target.checked) {
                     setDed80GG('60000');
+                    handleGlow('ded80GG', '60000');
                 } else {
                     setDed80GG('0');
+                    handleGlow('ded80GG', '0');
                 }
             };
 
             const handle80DDBCheckboxChange = (e) => {
                 if (e.target.checked) {
                     setDed80DDB(String(max80DDB));
+                     handleGlow('ded80DDB', String(max80DDB));
                 } else {
                     setDed80DDB('0');
+                    handleGlow('ded80DDB', '0');
                 }
             };
             
@@ -1734,23 +1806,23 @@
                                     <div className="space-y-4">
                                         <div>
                                             <label className="block text-sm font-medium mb-1">{t('salaryLabel')}</label>
-                                            <input type="text" inputMode="numeric" pattern="\d*" value={salary} onChange={handleSalaryChange} onBlur={handleBlur(setSalary)} onFocus={handleFocus} className={inputClass} />
+                                            <input id="salary" type="text" inputMode="numeric" pattern="\d*" value={salary} onChange={handleSalaryChange} onBlur={handleBlur(setSalary, 'salary')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('salary') ? 'input-glowing' : ''}`} />
                                         </div>
-                                        <div><label className="block text-sm font-medium mb-1">{t('interestIncomeLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={interest} onChange={handleNumericStringChange(setInterest)} onBlur={handleBlur(setInterest)} onFocus={handleFocus} className={inputClass} /></div>
-                                        <div><label className="block text-sm font-medium mb-1">{t('dividendIncomeLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={dividend} onChange={handleNumericStringChange(setDividend)} onBlur={handleBlur(setDividend)} onFocus={handleFocus} className={inputClass} /></div>
+                                        <div><label className="block text-sm font-medium mb-1">{t('interestIncomeLabel')}</label><input id="interest" type="text" inputMode="numeric" pattern="\d*" value={interest} onChange={handleNumericStringChange(setInterest, 'interest')} onBlur={handleBlur(setInterest, 'interest')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('interest') ? 'input-glowing' : ''}`} /></div>
+                                        <div><label className="block text-sm font-medium mb-1">{t('dividendIncomeLabel')}</label><input id="dividend" type="text" inputMode="numeric" pattern="\d*" value={dividend} onChange={handleNumericStringChange(setDividend, 'dividend')} onBlur={handleBlur(setDividend, 'dividend')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('dividend') ? 'input-glowing' : ''}`} /></div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('otherIncomeLabel')}
                                                 <InfoTooltip title={t('otherIncomeTooltip')} className="ml-2" />
                                             </label>
-                                            <input type="text" inputMode="numeric" pattern="\d*" value={otherIncome} onChange={handleNumericStringChange(setOtherIncome)} onBlur={handleBlur(setOtherIncome)} onFocus={handleFocus} className={inputClass} />
+                                            <input id="otherIncome" type="text" inputMode="numeric" pattern="\d*" value={otherIncome} onChange={handleNumericStringChange(setOtherIncome, 'otherIncome')} onBlur={handleBlur(setOtherIncome, 'otherIncome')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('otherIncome') ? 'input-glowing' : ''}`} />
                                         </div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('agriculturalIncomeLabel')}
                                                 <InfoTooltip title={t('agriculturalIncomeTooltip')} className="ml-2" />
                                             </label>
-                                            <input type="text" inputMode="numeric" pattern="\d*" value={agriculturalIncome} onChange={handleNumericStringChange(setAgriculturalIncome)} onBlur={handleBlur(setAgriculturalIncome)} onFocus={handleFocus} className={inputClass} />
+                                            <input id="agriculturalIncome" type="text" inputMode="numeric" pattern="\d*" value={agriculturalIncome} onChange={handleNumericStringChange(setAgriculturalIncome, 'agriculturalIncome')} onBlur={handleBlur(setAgriculturalIncome, 'agriculturalIncome')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('agriculturalIncome') ? 'input-glowing' : ''}`} />
                                             <p className="text-xs text-gray-500 mt-1">{t('agriculturalIncomeNote')}</p>
                                             {results.isAgriCalcApplicable && (
                                                 <div className="mt-2 space-y-1">
@@ -1771,28 +1843,28 @@
                                         </div>
                                     </div>
                                     <div className="space-y-4">
-                                        <div><label className="block text-sm font-medium mb-1">{t('businessProfessionLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={business} onChange={handleNumericStringChange(setBusiness)} onBlur={handleBlur(setBusiness)} onFocus={handleFocus} className={inputClass} /></div>
+                                        <div><label className="block text-sm font-medium mb-1">{t('businessProfessionLabel')}</label><input id="business" type="text" inputMode="numeric" pattern="\d*" value={business} onChange={handleNumericStringChange(setBusiness, 'business')} onBlur={handleBlur(setBusiness, 'business')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('business') ? 'input-glowing' : ''}`} /></div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('ltcgLabel')}
                                                 <InfoTooltip title={t('ltcgTooltip')} className="ml-2" />
                                             </label>
-                                            <input type="text" inputMode="numeric" pattern="\d*" value={ltcg} onChange={handleNumericStringChange(setLtcg)} onBlur={handleBlur(setLtcg)} onFocus={handleFocus} className={inputClass} />
+                                            <input id="ltcg" type="text" inputMode="numeric" pattern="\d*" value={ltcg} onChange={handleNumericStringChange(setLtcg, 'ltcg')} onBlur={handleBlur(setLtcg, 'ltcg')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ltcg') ? 'input-glowing' : ''}`} />
                                         </div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('stcgLabel')}
                                                 <InfoTooltip title={t('stcgTooltip')} className="ml-2" />
                                             </label>
-                                            <input type="text" inputMode="numeric" pattern="\d*" value={stcg} onChange={handleNumericStringChange(setStcg)} onBlur={handleBlur(setStcg)} onFocus={handleFocus} className={inputClass} />
+                                            <input id="stcg" type="text" inputMode="numeric" pattern="\d*" value={stcg} onChange={handleNumericStringChange(setStcg, 'stcg')} onBlur={handleBlur(setStcg, 'stcg')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('stcg') ? 'input-glowing' : ''}`} />
                                         </div>
-                                        <div><label className="block text-sm font-medium mb-1">{t('cryptoGainsLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={cryptoGains} onChange={handleNumericStringChange(setCryptoGains)} onBlur={handleBlur(setCryptoGains)} onFocus={handleFocus} className={inputClass} /></div>
+                                        <div><label className="block text-sm font-medium mb-1">{t('cryptoGainsLabel')}</label><input id="cryptoGains" type="text" inputMode="numeric" pattern="\d*" value={cryptoGains} onChange={handleNumericStringChange(setCryptoGains, 'cryptoGains')} onBlur={handleBlur(setCryptoGains, 'cryptoGains')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('cryptoGains') ? 'input-glowing' : ''}`} /></div>
                                         <div>
                                             <label className="flex items-center text-sm font-medium mb-1">
                                                 {t('taxableGiftsLabel')}
                                                 <InfoTooltip title={t('taxableGiftsTooltip')} className="ml-2" />
                                             </label>
-                                            <input type="text" inputMode="numeric" pattern="\d*" value={taxableGifts} onChange={handleNumericStringChange(setTaxableGifts)} onBlur={handleBlur(setTaxableGifts)} onFocus={handleFocus} className={inputClass} />
+                                            <input id="taxableGifts" type="text" inputMode="numeric" pattern="\d*" value={taxableGifts} onChange={handleNumericStringChange(setTaxableGifts, 'taxableGifts')} onBlur={handleBlur(setTaxableGifts, 'taxableGifts')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('taxableGifts') ? 'input-glowing' : ''}`} />
                                             <p className="text-xs text-gray-500 mt-1">{t('taxableGiftsNote')}</p>
                                         </div>
                                     </div>
@@ -1806,12 +1878,12 @@
                                 </p>
                                 <div className="grid sm:grid-cols-2 gap-4">
                                     <h4 className="sm:col-span-2 text-md font-semibold text-gray-700 -mb-2">{t('salaryBreakdown')}</h4>
-                                    <div><label className="block text-sm font-medium mb-1">{t('basicSalaryLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={basicSalary} onChange={handleNumericStringChange(setBasicSalary)} onBlur={handleBlur(setBasicSalary)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('daLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={da} onChange={handleNumericStringChange(setDa)} onBlur={handleBlur(setDa)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('hraReceivedLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={hraReceived} onChange={handleNumericStringChange(setHraReceived)} onBlur={handleBlur(setHraReceived)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('ltaLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={ltaReceived} onChange={handleNumericStringChange(setLtaReceived)} onBlur={handleBlur(setLtaReceived)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('specialAllowanceLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={specialAllowance} onChange={handleNumericStringChange(setSpecialAllowance)} onBlur={handleBlur(setSpecialAllowance)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('bonusLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={bonus} onChange={handleNumericStringChange(setBonus)} onBlur={handleBlur(setBonus)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('basicSalaryLabel')}</label><input id="basicSalary" type="text" inputMode="numeric" pattern="\d*" value={basicSalary} onChange={handleNumericStringChange(setBasicSalary, 'basicSalary')} onBlur={handleBlur(setBasicSalary, 'basicSalary')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('basicSalary') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('daLabel')}</label><input id="da" type="text" inputMode="numeric" pattern="\d*" value={da} onChange={handleNumericStringChange(setDa, 'da')} onBlur={handleBlur(setDa, 'da')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('da') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('hraReceivedLabel')}</label><input id="hraReceived" type="text" inputMode="numeric" pattern="\d*" value={hraReceived} onChange={handleNumericStringChange(setHraReceived, 'hraReceived')} onBlur={handleBlur(setHraReceived, 'hraReceived')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('hraReceived') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('ltaLabel')}</label><input id="ltaReceived" type="text" inputMode="numeric" pattern="\d*" value={ltaReceived} onChange={handleNumericStringChange(setLtaReceived, 'ltaReceived')} onBlur={handleBlur(setLtaReceived, 'ltaReceived')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ltaReceived') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('specialAllowanceLabel')}</label><input id="specialAllowance" type="text" inputMode="numeric" pattern="\d*" value={specialAllowance} onChange={handleNumericStringChange(setSpecialAllowance, 'specialAllowance')} onBlur={handleBlur(setSpecialAllowance, 'specialAllowance')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('specialAllowance') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('bonusLabel')}</label><input id="bonus" type="text" inputMode="numeric" pattern="\d*" value={bonus} onChange={handleNumericStringChange(setBonus, 'bonus')} onBlur={handleBlur(setBonus, 'bonus')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('bonus') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
                                      <div className="sm:col-span-2 text-sm font-semibold p-2 rounded bg-gray-100 text-center">
                                         {t('calculatedTotal')} {money(totalSalaryFromComponents)}
                                         {Math.round(totalSalaryFromComponents) !== Number(salary) && Number(salary) > 0 && <span className="ml-2 text-red-600">{t('mismatchWarning')}</span>}
@@ -1819,7 +1891,7 @@
                                     
                                     <hr className="sm:col-span-2 my-2" />
                                     <h4 className="sm:col-span-2 text-md font-semibold text-gray-700 -mb-2">{t('hraExemptionPlanner')}</h4>
-                                    <div><label className="block text-sm font-medium mb-1">{t('rentPaidLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={rentPaid} onChange={handleNumericStringChange(setRentPaid)} onBlur={handleBlur(setRentPaid)} onFocus={handleFocus} className={inputClass} disabled={presumptive} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('rentPaidLabel')}</label><input id="rentPaid" type="text" inputMode="numeric" pattern="\d*" value={rentPaid} onChange={handleNumericStringChange(setRentPaid, 'rentPaid')} onBlur={handleBlur(setRentPaid, 'rentPaid')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('rentPaid') ? 'input-glowing' : ''}`} disabled={presumptive} /></div>
                                      <div className="flex items-center">
                                         <input type="checkbox" id="isMetro" checked={isMetro} onChange={e => setIsMetro(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" disabled={presumptive} />
                                         <label htmlFor="isMetro" className="ml-2 block text-sm">{t('metroCityLabel')}</label>
@@ -1858,7 +1930,7 @@
                                     
                                     <hr className="sm:col-span-2 my-2" />
                                     <h4 className="sm:col-span-2 text-md font-semibold text-gray-700 -mb-2">{t('otherSalaryDeductions')}</h4>
-                                    <div><label className="block text-sm font-medium mb-1">{t('professionalTaxLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={professionalTax} onChange={handleNumericStringChange(setProfessionalTax, 2500)} onBlur={handleBlur(setProfessionalTax)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('professionalTaxLabel')}</label><input id="professionalTax" type="text" inputMode="numeric" pattern="\d*" value={professionalTax} onChange={handleNumericStringChange(setProfessionalTax, 'professionalTax', 2500)} onBlur={handleBlur(setProfessionalTax, 'professionalTax')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('professionalTax') ? 'input-glowing' : ''}`} disabled={presumptive}/></div>
                                 </div>
                             </div>
                             
@@ -1871,7 +1943,7 @@
                                           <InfoTooltip title={t('npsIndividualContributionTooltip')} className="ml-2" />
                                         </label>
                                         <p className="text-xs text-gray-500 mb-1">{t('npsIndividualContributionHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={ded80CCD1} onChange={handleNumericStringChange(setDed80CCD1, remaining80CCD1_limit)} onBlur={handleBlur(setDed80CCD1)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/>
+                                        <input id="ded80CCD1" type="text" inputMode="numeric" pattern="\d*" value={ded80CCD1} onChange={handleNumericStringChange(setDed80CCD1, 'ded80CCD1', remaining80CCD1_limit)} onBlur={handleBlur(setDed80CCD1, 'ded80CCD1')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80CCD1') ? 'input-glowing' : ''}`} disabled={presumptive}/>
                                         {(ded80CNum > 0 || ded80CCD1Num > 0) && (
                                           <p className="text-xs text-blue-600 mt-1" dangerouslySetInnerHTML={{ __html: t('sharedLimitNote', { claimedVal: money(ded80CNum), claimedSec: '80C', otherSec: '80CCD(1)', limitVal: money(remaining80CCD1_limit) }) }} />
                                         )}
@@ -1879,12 +1951,12 @@
                                     <div>
                                         <label className="block text-sm font-medium mb-1">{t('npsVoluntaryLabel')}</label>
                                         <p className="text-xs text-gray-500 mb-1">{t('npsVoluntaryHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={nps80CCD1B} onChange={handleNumericStringChange(setNps80CCD1B, 50000)} onBlur={handleBlur(setNps80CCD1B)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/>
+                                        <input id="nps80CCD1B" type="text" inputMode="numeric" pattern="\d*" value={nps80CCD1B} onChange={handleNumericStringChange(setNps80CCD1B, 'nps80CCD1B', 50000)} onBlur={handleBlur(setNps80CCD1B, 'nps80CCD1B')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('nps80CCD1B') ? 'input-glowing' : ''}`} disabled={presumptive}/>
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="block text-sm font-medium mb-1">{t('npsEmployerLabel')}</label>
                                         <p className="text-xs text-gray-500 mb-1">{t('npsEmployerHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={npsEmployer} onChange={handleNumericStringChange(setNpsEmployer, maxNpsEmployer)} onBlur={handleBlur(setNpsEmployer)} onFocus={handleFocus} className={inputClass} />
+                                        <input id="npsEmployer" type="text" inputMode="numeric" pattern="\d*" value={npsEmployer} onChange={handleNumericStringChange(setNpsEmployer, 'npsEmployer', maxNpsEmployer)} onBlur={handleBlur(setNpsEmployer, 'npsEmployer')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('npsEmployer') ? 'input-glowing' : ''}`} />
                                         {maxNpsEmployer > 0 && (
                                             <p className="text-xs text-blue-600 mt-1">
                                                 {t('npsEmployerLimitNote', { amount: money(maxNpsEmployer) })}
@@ -1911,7 +1983,7 @@
                                      <div>
                                         <label className="block text-sm font-medium mb-1">{t('eligibleTravelExpensesLabel')}</label>
                                          <p className="text-xs text-gray-500 mb-1">{t('fareHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={ltaActualExpenses} onChange={handleNumericStringChange(setLtaActualExpenses)} onBlur={handleBlur(setLtaActualExpenses)} onFocus={handleFocus} className={inputClass} disabled={presumptive || Number(ltaReceived) === 0 || ltaJourneysClaimed === '0'} />
+                                        <input id="ltaActualExpenses" type="text" inputMode="numeric" pattern="\d*" value={ltaActualExpenses} onChange={handleNumericStringChange(setLtaActualExpenses, 'ltaActualExpenses')} onBlur={handleBlur(setLtaActualExpenses, 'ltaActualExpenses')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ltaActualExpenses') ? 'input-glowing' : ''}`} disabled={presumptive || Number(ltaReceived) === 0 || ltaJourneysClaimed === '0'} />
                                     </div>
                                 </div>
                                  {results.ltaExemption > 0 && (
@@ -1948,16 +2020,16 @@
                                  <div className="grid sm:grid-cols-2 gap-4">
                                      <div>
                                         <label className="block text-sm font-medium mb-1">{t('ded80CLabel')}</label>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={ded80C} onChange={handleNumericStringChange(setDed80C, remaining80C_limit)} onBlur={handleBlur(setDed80C)} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                        <input id="ded80C" type="text" inputMode="numeric" pattern="\d*" value={ded80C} onChange={handleNumericStringChange(setDed80C, 'ded80C', remaining80C_limit)} onBlur={handleBlur(setDed80C, 'ded80C')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80C') ? 'input-glowing' : ''}`} disabled={presumptive} />
                                         {(ded80CNum > 0 || ded80CCD1Num > 0) && (
                                             <p className="text-xs text-blue-600 mt-1" dangerouslySetInnerHTML={{ __html: t('sharedLimitNoteInitial', { claimedVal: money(ded80CCD1Num), claimedSec: '80CCD(1)', otherSec: '80C', limitVal: money(remaining80C_limit) }) }} />
                                         )}
                                      </div>
-                                     <div><label className="block text-sm font-medium mb-1">{t('ded80DLabel', {amount: money(max80D)})}</label><input type="text" inputMode="numeric" pattern="\d*" value={ded80D} onChange={handleNumericStringChange(setDed80D, max80D)} onBlur={handleBlur(setDed80D)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/></div>
-                                     <div><label className="block text-sm font-medium mb-1">{t('ded80GLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={ded80G} onChange={handleNumericStringChange(setDed80G)} onBlur={handleBlur(setDed80G)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/></div>
-                                     <div><label className="block text-sm font-medium mb-1">{t('ded80TTALabel', { amount: money(max80TTA) })}</label><input type="text" inputMode="numeric" pattern="\d*" value={ded80TTA} onChange={handleNumericStringChange(setDed80TTA, max80TTA)} onBlur={handleBlur(setDed80TTA)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/></div>
-                                     <div><label className="block text-sm font-medium mb-1">{t('ded80ELabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={ded80E} onChange={handleNumericStringChange(setDed80E)} onBlur={handleBlur(setDed80E)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/></div>
-                                     <div><label className="block text-sm font-medium mb-1">{t('ded80GGLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={ded80GG} onChange={handleNumericStringChange(setDed80GG, 60000)} onBlur={handleBlur(setDed80GG)} onFocus={handleFocus} className={inputClass} disabled={presumptive || Number(hraReceived) > 0}/></div>
+                                     <div><label className="block text-sm font-medium mb-1">{t('ded80DLabel', {amount: money(max80D)})}</label><input id="ded80D" type="text" inputMode="numeric" pattern="\d*" value={ded80D} onChange={handleNumericStringChange(setDed80D, 'ded80D', max80D)} onBlur={handleBlur(setDed80D, 'ded80D')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80D') ? 'input-glowing' : ''}`} disabled={presumptive}/></div>
+                                     <div><label className="block text-sm font-medium mb-1">{t('ded80GLabel')}</label><input id="ded80G" type="text" inputMode="numeric" pattern="\d*" value={ded80G} onChange={handleNumericStringChange(setDed80G, 'ded80G')} onBlur={handleBlur(setDed80G, 'ded80G')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80G') ? 'input-glowing' : ''}`} disabled={presumptive}/></div>
+                                     <div><label className="block text-sm font-medium mb-1">{t('ded80TTALabel', { amount: money(max80TTA) })}</label><input id="ded80TTA" type="text" inputMode="numeric" pattern="\d*" value={ded80TTA} onChange={handleNumericStringChange(setDed80TTA, 'ded80TTA', max80TTA)} onBlur={handleBlur(setDed80TTA, 'ded80TTA')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80TTA') ? 'input-glowing' : ''}`} disabled={presumptive}/></div>
+                                     <div><label className="block text-sm font-medium mb-1">{t('ded80ELabel')}</label><input id="ded80E" type="text" inputMode="numeric" pattern="\d*" value={ded80E} onChange={handleNumericStringChange(setDed80E, 'ded80E')} onBlur={handleBlur(setDed80E, 'ded80E')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80E') ? 'input-glowing' : ''}`} disabled={presumptive}/></div>
+                                     <div><label className="block text-sm font-medium mb-1">{t('ded80GGLabel')}</label><input id="ded80GG" type="text" inputMode="numeric" pattern="\d*" value={ded80GG} onChange={handleNumericStringChange(setDed80GG, 'ded80GG', 60000)} onBlur={handleBlur(setDed80GG, 'ded80GG')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80GG') ? 'input-glowing' : ''}`} disabled={presumptive || Number(hraReceived) > 0}/></div>
                                      <div>
                                         <label className="block text-sm font-medium mb-1">{t('ded80ULabel')}</label>
                                         <select value={ded80U} onChange={e => setDed80U(e.target.value)} className={inputClass} disabled={presumptive}>
@@ -1966,16 +2038,16 @@
                                             <option value="severe">{t('ded80USevere')}</option>
                                         </select>
                                      </div>
-                                     <div><label className="block text-sm font-medium mb-1">{t('ded80DDBLabel', { amount: money(max80DDB) })}</label><input type="text" inputMode="numeric" pattern="\d*" value={ded80DDB} onChange={handleNumericStringChange(setDed80DDB, max80DDB)} onBlur={handleBlur(setDed80DDB)} onFocus={handleFocus} className={inputClass} disabled={presumptive}/></div>
+                                     <div><label className="block text-sm font-medium mb-1">{t('ded80DDBLabel', { amount: money(max80DDB) })}</label><input id="ded80DDB" type="text" inputMode="numeric" pattern="\d*" value={ded80DDB} onChange={handleNumericStringChange(setDed80DDB, 'ded80DDB', max80DDB)} onBlur={handleBlur(setDed80DDB, 'ded80DDB')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('ded80DDB') ? 'input-glowing' : ''}`} disabled={presumptive}/></div>
                                  </div>
                             </div>
 
                              <div className={cardClass}>
                                 <h3 className="text-xl font-semibold mb-4 border-b pb-2">{t('prepaidTaxesTitle')}</h3>
                                 <div className="grid sm:grid-cols-3 gap-4">
-                                    <div><label className="block text-sm font-medium mb-1">{t('tdsLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={tds} onChange={handleNumericStringChange(setTds)} onBlur={handleBlur(setTds)} onFocus={handleFocus} className={inputClass} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('tcsLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={tcs} onChange={handleNumericStringChange(setTcs)} onBlur={handleBlur(setTcs)} onFocus={handleFocus} className={inputClass} /></div>
-                                    <div><label className="block text-sm font-medium mb-1">{t('advanceTaxLabel')}</label><input type="text" inputMode="numeric" pattern="\d*" value={advanceTax} onChange={handleNumericStringChange(setAdvanceTax)} onBlur={handleBlur(setAdvanceTax)} onFocus={handleFocus} className={inputClass} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('tdsLabel')}</label><input id="tds" type="text" inputMode="numeric" pattern="\d*" value={tds} onChange={handleNumericStringChange(setTds, 'tds')} onBlur={handleBlur(setTds, 'tds')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('tds') ? 'input-glowing' : ''}`} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('tcsLabel')}</label><input id="tcs" type="text" inputMode="numeric" pattern="\d*" value={tcs} onChange={handleNumericStringChange(setTcs, 'tcs')} onBlur={handleBlur(setTcs, 'tcs')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('tcs') ? 'input-glowing' : ''}`} /></div>
+                                    <div><label className="block text-sm font-medium mb-1">{t('advanceTaxLabel')}</label><input id="advanceTax" type="text" inputMode="numeric" pattern="\d*" value={advanceTax} onChange={handleNumericStringChange(setAdvanceTax, 'advanceTax')} onBlur={handleBlur(setAdvanceTax, 'advanceTax')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('advanceTax') ? 'input-glowing' : ''}`} /></div>
                                 </div>
                             </div>
 
@@ -2039,19 +2111,19 @@
                                                                         <h5 className="sm:col-span-2 text-md font-semibold text-gray-700 -mb-2">{t('detailedGAVTitle')}</h5>
                                                                          <div>
                                                                             <label className="flex items-center text-sm font-medium mb-1">{t('municipalValueLabel')} <InfoTooltip title={t('municipalValueTooltip')} className="ml-2" /></label>
-                                                                            <input type="text" inputMode="numeric" pattern="\d*" value={prop.municipalValue} onChange={e => updateProperty(prop.id, { municipalValue: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { municipalValue: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                            <input id={`prop-${prop.id}-municipalValue`} type="text" inputMode="numeric" pattern="\d*" value={prop.municipalValue} onChange={e => handlePropertyChange(prop.id, 'municipalValue', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'municipalValue', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-municipalValue`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                                          </div>
                                                                          <div>
                                                                             <label className="flex items-center text-sm font-medium mb-1">{t('fairRentLabel')} <InfoTooltip title={t('fairRentTooltip')} className="ml-2" /></label>
-                                                                            <input type="text" inputMode="numeric" pattern="\d*" value={prop.fairRent} onChange={e => updateProperty(prop.id, { fairRent: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { fairRent: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                            <input id={`prop-${prop.id}-fairRent`} type="text" inputMode="numeric" pattern="\d*" value={prop.fairRent} onChange={e => handlePropertyChange(prop.id, 'fairRent', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'fairRent', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-fairRent`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                                          </div>
                                                                          <div>
                                                                             <label className="flex items-center text-sm font-medium mb-1">{t('standardRentLabel')} <InfoTooltip title={t('standardRentTooltip')} className="ml-2" /></label>
-                                                                            <input type="text" inputMode="numeric" pattern="\d*" value={prop.standardRent} onChange={e => updateProperty(prop.id, { standardRent: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { standardRent: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                            <input id={`prop-${prop.id}-standardRent`} type="text" inputMode="numeric" pattern="\d*" value={prop.standardRent} onChange={e => handlePropertyChange(prop.id, 'standardRent', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'standardRent', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-standardRent`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                                          </div>
                                                                          <div>
                                                                             <label className="flex items-center text-sm font-medium mb-1">{t('actualRentLabel')} <InfoTooltip title={t('actualRentTooltip')} className="ml-2" /></label>
-                                                                            <input type="text" inputMode="numeric" pattern="\d*" value={prop.actualRent} onChange={e => updateProperty(prop.id, { actualRent: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { actualRent: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                            <input id={`prop-${prop.id}-actualRent`} type="text" inputMode="numeric" pattern="\d*" value={prop.actualRent} onChange={e => handlePropertyChange(prop.id, 'actualRent', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'actualRent', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-actualRent`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                                          </div>
                                                                     </div>
                                                                     {(() => {
@@ -2085,12 +2157,12 @@
                                                             ) : (
                                                                 <div>
                                                                     <label className="flex items-center text-sm font-medium mb-1">{t('gavLabel')} <InfoTooltip title={t('gavTooltip')} className="ml-2" /></label>
-                                                                    <input type="text" inputMode="numeric" pattern="\d*" value={prop.gav} onChange={e => updateProperty(prop.id, { gav: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { gav: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                    <input id={`prop-${prop.id}-gav`} type="text" inputMode="numeric" pattern="\d*" value={prop.gav} onChange={e => handlePropertyChange(prop.id, 'gav', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'gav', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-gav`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                                 </div>
                                                             )}
                                                              <div>
                                                                 <label className="flex items-center text-sm font-medium mb-1">{t('municipalTaxesLabel')} <InfoTooltip title={t('municipalTaxesTooltip')} className="ml-2" /></label>
-                                                                <input type="text" inputMode="numeric" pattern="\d*" value={prop.municipalTaxes} onChange={e => updateProperty(prop.id, { municipalTaxes: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { municipalTaxes: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                <input id={`prop-${prop.id}-municipalTaxes`} type="text" inputMode="numeric" pattern="\d*" value={prop.municipalTaxes} onChange={e => handlePropertyChange(prop.id, 'municipalTaxes', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'municipalTaxes', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-municipalTaxes`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                             </div>
                                                         </div>
                                                         
@@ -2098,12 +2170,12 @@
                                                             <div>
                                                                 <label className="block text-sm font-medium mb-1">{t('lopInterestLabel')}</label>
                                                                 <p className="text-xs text-gray-500 mb-1">{t('lopInterestHint')}</p>
-                                                                <input type="text" inputMode="numeric" pattern="\d*" value={prop.interestOnLoanLOP} onChange={e => updateProperty(prop.id, { interestOnLoanLOP: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { interestOnLoanLOP: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                <input id={`prop-${prop.id}-interestOnLoanLOP`} type="text" inputMode="numeric" pattern="\d*" value={prop.interestOnLoanLOP} onChange={e => handlePropertyChange(prop.id, 'interestOnLoanLOP', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'interestOnLoanLOP', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-interestOnLoanLOP`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                             </div>
                                                              <div>
                                                                 <label className="flex items-center text-sm font-medium mb-1">{t('preConInterestLabel')} <InfoTooltip title={t('preConInterestTooltipLOP')} className="ml-2" /></label>
                                                                  <p className="text-xs text-gray-500 mb-1">{t('preConInterestHint')}</p>
-                                                                <input type="text" inputMode="numeric" pattern="\d*" value={prop.preConstructionInterest} onChange={e => updateProperty(prop.id, { preConstructionInterest: e.target.value.replace(/\D/g, '')})} onBlur={e => e.target.value === '' && updateProperty(prop.id, { preConstructionInterest: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                                <input id={`prop-${prop.id}-preConstructionInterest`} type="text" inputMode="numeric" pattern="\d*" value={prop.preConstructionInterest} onChange={e => handlePropertyChange(prop.id, 'preConstructionInterest', e.target.value)} onBlur={e => e.target.value === '' && handlePropertyChange(prop.id, 'preConstructionInterest', '0')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-preConstructionInterest`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                             </div>
                                                         </div>
 
@@ -2113,7 +2185,7 @@
                                                         <div>
                                                             <label className="block text-sm font-medium mb-1">{t('sopInterestLabel')}</label>
                                                             <p className="text-xs text-gray-500 mb-1">{t('sopInterestHint', { cap: prop.loanTypeSOP === 'purchase' ? '₹2,00,000' : '₹30,000' })}</p>
-                                                            <input type="text" inputMode="numeric" pattern="\d*" value={prop.interestOnLoanSOP} onChange={e => handleSOPInterestChange(prop.id, e.target.value)} onBlur={e => e.target.value === '' && updateProperty(prop.id, { interestOnLoanSOP: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                                            <input id={`prop-${prop.id}-interestOnLoanSOP`} type="text" inputMode="numeric" pattern="\d*" value={prop.interestOnLoanSOP} onChange={e => handleSOPInterestChange(prop.id, e)} onBlur={e => e.target.value === '' && handleSOPInterestChange(prop.id, { target: { value: '0', id: e.target.id }})} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-interestOnLoanSOP`) ? 'input-glowing' : ''}`} disabled={presumptive} />
                                                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm">
                                                                 <label className="flex items-center"><input type="radio" value="purchase" name={`loanType-${prop.id}`} checked={prop.loanTypeSOP === 'purchase'} onChange={e => updateProperty(prop.id, { loanTypeSOP: 'purchase' })} className="mr-1.5 h-4 w-4" disabled={presumptive}/>{t('loanTypePurchase')}</label>
                                                                 <label className="flex items-center"><input type="radio" value="repair" name={`loanType-${prop.id}`} checked={prop.loanTypeSOP === 'repair'} onChange={e => updateProperty(prop.id, { loanTypeSOP: 'repair', preConstructionInterest: '0' })} className="mr-1.5 h-4 w-4" disabled={presumptive}/>{t('loanTypeRepair')}</label>
@@ -2122,7 +2194,7 @@
                                                         <div>
                                                             <label className="flex items-center text-sm font-medium mb-1">{t('preConInterestLabel')} <InfoTooltip title={t('preConInterestTooltipSOP')} className="ml-2" /></label>
                                                              <p className="text-xs text-gray-500 mb-1">{t('sopPreConInterestHint')}</p>
-                                                            <input type="text" inputMode="numeric" pattern="\d*" value={prop.preConstructionInterest} onChange={e => handleSOPPreConInterestChange(prop.id, e.target.value)} onBlur={e => e.target.value === '' && updateProperty(prop.id, { preConstructionInterest: '0' })} onFocus={handleFocus} className={inputClass} disabled={presumptive || prop.loanTypeSOP === 'repair'} />
+                                                            <input id={`prop-${prop.id}-preConstructionInterest`} type="text" inputMode="numeric" pattern="\d*" value={prop.preConstructionInterest} onChange={e => handleSOPPreConInterestChange(prop.id, e)} onBlur={e => e.target.value === '' && handleSOPPreConInterestChange(prop.id, { target: { value: '0', id: e.target.id }})} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has(`prop-${prop.id}-preConstructionInterest`) ? 'input-glowing' : ''}`} disabled={presumptive || prop.loanTypeSOP === 'repair'} />
                                                             {prop.loanTypeSOP === 'purchase' && (
                                                                 <p className="text-xs text-blue-600 mt-1" dangerouslySetInnerHTML={{ __html: t('sopRemainingAllowance', { amount: money(remainingAllowance) }) }} />
                                                             )}
@@ -2146,7 +2218,7 @@
                                     <div>
                                         <label className="flex items-center text-sm font-medium mb-1">{t('broughtForwardLossLabel')} <InfoTooltip title={t('broughtForwardLossTooltip')} className="ml-2" /></label>
                                         <p className="text-xs text-gray-500 mb-1">{t('broughtForwardLossHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={broughtForwardLossHP} onChange={handleNumericStringChange(setBroughtForwardLossHP)} onBlur={handleBlur(setBroughtForwardLossHP)} onFocus={handleFocus} className={inputClass} disabled={presumptive} />
+                                        <input id="broughtForwardLossHP" type="text" inputMode="numeric" pattern="\d*" value={broughtForwardLossHP} onChange={handleNumericStringChange(setBroughtForwardLossHP, 'broughtForwardLossHP')} onBlur={handleBlur(setBroughtForwardLossHP, 'broughtForwardLossHP')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('broughtForwardLossHP') ? 'input-glowing' : ''}`} disabled={presumptive} />
                                     </div>
                                 </div>
 
@@ -2225,12 +2297,12 @@
                                     <div>
                                         <label className="block text-sm font-medium mb-1">{t('agniveerYourContributionLabel')}</label>
                                         <p className="text-xs text-gray-500 mb-1">{t('agniveerYourContributionHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={agniveerContribution} onChange={handleNumericStringChange(setAgniveerContribution)} onBlur={handleBlur(setAgniveerContribution)} onFocus={handleFocus} className={inputClass} />
+                                        <input id="agniveerContribution" type="text" inputMode="numeric" pattern="\d*" value={agniveerContribution} onChange={handleNumericStringChange(setAgniveerContribution, 'agniveerContribution')} onBlur={handleBlur(setAgniveerContribution, 'agniveerContribution')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('agniveerContribution') ? 'input-glowing' : ''}`} />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-1">{t('agniveerGovtContributionLabel')}</label>
                                         <p className="text-xs text-gray-500 mb-1">{t('agniveerGovtContributionHint')}</p>
-                                        <input type="text" inputMode="numeric" pattern="\d*" value={govtAgniveerContribution} onChange={handleNumericStringChange(setGovtAgniveerContribution)} onBlur={handleBlur(setGovtAgniveerContribution)} onFocus={handleFocus} className={inputClass} />
+                                        <input id="govtAgniveerContribution" type="text" inputMode="numeric" pattern="\d*" value={govtAgniveerContribution} onChange={handleNumericStringChange(setGovtAgniveerContribution, 'govtAgniveerContribution')} onBlur={handleBlur(setGovtAgniveerContribution, 'govtAgniveerContribution')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('govtAgniveerContribution') ? 'input-glowing' : ''}`} />
                                     </div>
                                 </div>
                             </div>
