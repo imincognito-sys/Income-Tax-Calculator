@@ -278,6 +278,8 @@
             taxBeforeSurcharge: "Total Tax before Surcharge:",
             surchargeLabel: "Surcharge (@ {rate}%):",
             marginalReliefLabel: "Less: Marginal Relief:",
+            marginalReliefRebateLabel: "Less: Marginal Relief (Rebate u/s 87A):",
+            rebate87ALabel: "Rebate u/s 87A",
             taxBeforeCess: "Tax Before Cess:",
             cessLabel: "Cess (4%):",
             totalTaxPayable: "Total Tax Payable:",
@@ -321,6 +323,10 @@
             newRegimeOppsStdDed: "<strong>Standard Deduction:</strong> A deduction of {amount} has been applied to your salary.",
             newRegimeOppsNPS: "<strong>Employer's NPS Contribution (80CCD2):</strong> You have claimed {amount}.",
             newRegimeOppsAgniveer: "<strong>Agniveer Scheme (80CCH):</strong> You have claimed a total of {amount}.",
+            newRegimeOppsMarginalReliefBullet: "<strong>Marginal Relief (Rebate u/s 87A):</strong> A relief of {amount} has been applied.",
+            newRegimeMarginalReliefLabel: "Marginal Relief (Rebate u/s 87A):",
+            newRegimeOppsMarginalReliefTooltip: "Marginal relief in income tax is a benefit provided to taxpayers when their income slightly exceeds a tax-free limit, ensuring they do not pay an excessively high tax compared to their income increase. For FY 2025-26, the tax-free income limit is ₹12 lakh.",
+            newRegimeOppsMarginalReliefBulletTooltip: "Important Note: This relief is triggered on Taxable Income just above ₹12,00,000 and phases out at approx. ₹12,70,588. For a salaried person, the equivalent Salaried Income where this relief ends is approx. ₹13,45,588 (i.e: ₹12,70,588 + ₹75,000).",
             newRegimeOppsNote: "These are the primary deductions available to reduce tax under the New Regime. Most other deductions are not applicable.",
             oppsNPSNewRegimeTitle: "<strong>NPS Contribution (80CCD2):</strong> You may be eligible for tax savings. Please check with your employer.",
             oppsNPSNewRegimeTooltip: "Assessee can be Government Employee (or) Non Government Employee. Self employed assessees are not eligible for this deduction.\n\nDeduction Limits:\n• Central / State Government Employer: 14% of salary (Basic + DA)\n• Other Employer:\n  - Old Regime: 10% of salary (Basic + DA)\n  - New Regime: 14% of salary (Basic + DA)",
@@ -352,7 +358,7 @@
             newTaxRegimeTitle: "New Tax Regime (Default)",
             taxRateCol: "Tax Rate",
             newRegimeNote1: "<strong>Standard Deduction:</strong> ₹75,000 on Salary Income.",
-            newRegimeNote2: "<strong>Tax Rebate (u/s 87A):</strong> Full tax rebate if Taxable Income is up to ₹12,00,000.",
+            newRegimeNote2: "<strong>Tax Rebate (u/s 87A):</strong> Full tax rebate if Taxable Income is up to ₹12,00,000. Marginal relief is available for income slightly above this limit.",
             newRegimeNote3: "<strong>Health & Education Cess:</strong> 4% on tax amount (including surcharge, if any).",
             surchargeTitle: "Surcharge & Marginal Relief",
             toggleSurchargeTables: "{toggle} Surcharge Tables",
@@ -575,20 +581,9 @@
             return { tax, breakdown };
         };
 
-        const calculateNewRegimeTax = (taxableIncome) => {
+        const calculateNewRegimeSlabTaxOnly = (taxableIncome) => {
             const breakdown = [];
             let tax = 0;
-
-            if (taxableIncome <= 1200000) {
-                if (taxableIncome > 400000) {
-                    const taxBeforeRebate = (Math.min(taxableIncome, 800000) - 400000) * 0.05
-                                       + (Math.max(0, taxableIncome - 800000)) * 0.10;
-                    breakdown.push({ range: `On income up to ₹${taxableIncome.toLocaleString('en-IN')}`, tax: taxBeforeRebate });
-                    breakdown.push({ range: 'Rebate u/s 87A', tax: -taxBeforeRebate });
-                }
-                return { tax: 0, breakdown };
-            }
-
             let remainingIncome = taxableIncome;
 
             if (remainingIncome > 2400000) {
@@ -626,8 +621,33 @@
                 tax += taxOnSlab;
                 breakdown.unshift({ range: '₹4,00,001 - ₹8,00,000', rate: '5%', tax: taxOnSlab });
             }
-
+            
             return { tax, breakdown };
+        };
+        
+        const calculateNewRegimeTax = (taxableIncome) => {
+            const { tax: rawTax, breakdown: rawBreakdown } = calculateNewRegimeSlabTaxOnly(taxableIncome);
+
+            if (taxableIncome <= 1200000) {
+                const rebate = rawTax;
+                const newBreakdown = rawBreakdown ? [...rawBreakdown] : [];
+                if (rebate > 0) {
+                    newBreakdown.push({ range: 'Rebate u/s 87A', tax: -rebate });
+                }
+                return { tax: 0, breakdown: newBreakdown, slabTaxRaw: rawTax, rebate, marginalRelief: 0 };
+            }
+
+            const excessIncome = taxableIncome - 1200000;
+            if (rawTax > excessIncome) {
+                const marginalRelief = rawTax - excessIncome;
+                const newBreakdown = rawBreakdown ? [...rawBreakdown] : [];
+                if (marginalRelief > 0) {
+                    newBreakdown.push({ range: 'Marginal Relief (Rebate u/s 87A)', tax: -marginalRelief });
+                }
+                return { tax: excessIncome, breakdown: newBreakdown, slabTaxRaw: rawTax, rebate: 0, marginalRelief };
+            }
+
+            return { tax: rawTax, breakdown: rawBreakdown || [], slabTaxRaw: rawTax, rebate: 0, marginalRelief: 0 };
         };
 
 
@@ -1324,8 +1344,9 @@
                 const otherChapVIADeductions = presumptive ? 0 : cap80D + cap80TTA + cap80G + cap80E + cap80GG + cap80U + cap80DDB;
                 const yourAgniveerDeductionOld = presumptive ? 0 : capAgniveerContribution;
                 const govtAgniveerDeductionOld = presumptive ? 0 : capGovtAgniveerContribution;
+                const deductions80CCEApplied = presumptive ? 0 : deductions80CCE;
                 
-                const totalDeductionsOld = standardDeductionAppliedOld + professionalTaxApplied + nps80CCD1BApplied + otherChapVIADeductions + deductions80CCE + capNpsEmployer + yourAgniveerDeductionOld + govtAgniveerDeductionOld;
+                const totalDeductionsOld = standardDeductionAppliedOld + professionalTaxApplied + nps80CCD1BApplied + otherChapVIADeductions + deductions80CCEApplied + capNpsEmployer + yourAgniveerDeductionOld + govtAgniveerDeductionOld;
                 const taxableOld = Math.max(0, grossTotalIncomeOld - totalDeductionsOld);
                 
                 const { tax: slabTaxOldVal, breakdown: slabTaxOldBreakdown } = calculateOldRegimeTax(taxableOld, ageBand, agriculturalIncome);
@@ -1350,7 +1371,14 @@
                 const totalDeductionsNew = standardDeductionAppliedNew + capNpsEmployer + govtAgniveerDeductionNew;
                 const taxableNew = Math.max(0, grossTotalIncomeNew - totalDeductionsNew);
                 
-                const { tax: slabTaxNewVal, breakdown: slabTaxNewBreakdown } = calculateNewRegimeTax(taxableNew);
+                const { 
+                    tax: slabTaxNewVal, 
+                    breakdown: slabTaxNewBreakdown,
+                    slabTaxRaw: slabTaxNewRaw,
+                    rebate: rebate87A_New,
+                    marginalRelief: marginalRelief87A_New
+                } = calculateNewRegimeTax(taxableNew);
+
                 const taxBeforeSurchargeNew = slabTaxNewVal + specialRateTaxes;
                 const { surcharge: surchargeNew, rate: surchargeRateNew, marginalRelief: marginalReliefNew } = calculateSurchargeAndRelief(taxableNew + Number(ltcg) + Number(stcg) + Number(cryptoGains), taxBeforeSurchargeNew, 'new', ageBand);
                 const taxAfterSurchargeAndReliefNew = taxBeforeSurchargeNew + surchargeNew - marginalReliefNew;
@@ -1427,6 +1455,7 @@
                     totalDeductionsOld,
                     
                     taxableNew, totalTaxNew, netNew, slabTaxNewVal, slabTaxNewBreakdown,
+                    slabTaxNewRaw, rebate87A_New, marginalRelief87A_New,
                     surchargeNew, surchargeRateNew, marginalReliefNew,
                     taxAfterSurchargeAndReliefNew, cessNew, standardDeductionAppliedNew, npsEmployerApplied: capNpsEmployer,
                     totalDeductionsNew,
@@ -1934,7 +1963,7 @@
                                 </div>
                             </div>
                             
-                            <div className={cardClass}>
+                            <div className={`${cardClass} ${presumptive ? 'opacity-50' : ''}`}>
                                 <h3 className="text-xl font-semibold mb-4 border-b pb-2">{t('npsContributionsTitle')}</h3>
                                 <div className="grid sm:grid-cols-2 gap-4">
                                     <div>
@@ -1956,7 +1985,7 @@
                                     <div className="sm:col-span-2">
                                         <label className="block text-sm font-medium mb-1">{t('npsEmployerLabel')}</label>
                                         <p className="text-xs text-gray-500 mb-1">{t('npsEmployerHint')}</p>
-                                        <input id="npsEmployer" type="text" inputMode="numeric" pattern="\d*" value={npsEmployer} onChange={handleNumericStringChange(setNpsEmployer, 'npsEmployer', maxNpsEmployer)} onBlur={handleBlur(setNpsEmployer, 'npsEmployer')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('npsEmployer') ? 'input-glowing' : ''}`} />
+                                        <input id="npsEmployer" type="text" inputMode="numeric" pattern="\d*" value={npsEmployer} onChange={handleNumericStringChange(setNpsEmployer, 'npsEmployer', maxNpsEmployer)} onBlur={handleBlur(setNpsEmployer, 'npsEmployer')} onFocus={handleFocus} className={`${inputClass} ${glowingInputs.has('npsEmployer') ? 'input-glowing' : ''}`} disabled={presumptive} />
                                         {maxNpsEmployer > 0 && (
                                             <p className="text-xs text-blue-600 mt-1">
                                                 {t('npsEmployerLimitNote', { amount: money(maxNpsEmployer) })}
@@ -2354,6 +2383,10 @@
                                             {results.otherChapVIADeductions > 0 && <div className="flex justify-between"><span>{t('chapVIADedLabel')}</span> <span>- {money(results.otherChapVIADeductions)}</span></div>}
 
                                             <div className="flex justify-between font-bold mt-1 border-t pt-1"><span>{t('taxableIncomeLabel')}</span> <span>{money(results.taxableOld)}</span></div>
+
+                                            {(results.marginalReliefOld > 0) && <hr className="my-1 border-gray-300" />}
+                                            {results.marginalReliefOld > 0 && <div className="flex justify-between text-green-700"><span>{t('marginalReliefLabel')}</span> <span>- {money(results.marginalReliefOld)}</span></div>}
+
                                             {totalPrepaidTaxes > 0 && <div className="flex justify-between text-green-700 mt-1 border-t pt-1"><span>{t('prepaidTaxesLabel')}</span> <span>- {money(totalPrepaidTaxes)}</span></div>}
                                         </div>
                                     </div>
@@ -2373,6 +2406,27 @@
                                             {results.govtAgniveerContributionAppliedNew > 0 && <div className="flex justify-between"><span>{t('govtAgniveerLabel')}</span> <span>- {money(results.govtAgniveerContributionAppliedNew)}</span></div>}
 
                                             <div className="flex justify-between font-bold mt-1 border-t pt-1"><span>{t('taxableIncomeLabel')}</span> <span>{money(results.taxableNew)}</span></div>
+
+                                            {(results.rebate87A_New > 0 || results.marginalRelief87A_New > 0 || results.marginalReliefNew > 0) && <hr className="my-1 border-gray-300" />}
+                                            {results.rebate87A_New > 0 && (
+                                                <div className="flex justify-between text-green-700">
+                                                    <span>{t('rebate87ALabel')}</span>
+                                                    <span>- {money(results.rebate87A_New)}</span>
+                                                </div>
+                                            )}
+                                            {results.marginalRelief87A_New > 0 && (
+                                                <div className="flex justify-between text-green-700">
+                                                    <span>{t('marginalReliefRebateLabel')}</span>
+                                                    <span>- {money(results.marginalRelief87A_New)}</span>
+                                                </div>
+                                            )}
+                                            {results.marginalReliefNew > 0 && (
+                                                <div className="flex justify-between text-green-700">
+                                                    <span>{t('marginalReliefLabel')}</span>
+                                                    <span>- {money(results.marginalReliefNew)}</span>
+                                                </div>
+                                            )}
+
                                             {totalPrepaidTaxes > 0 && <div className="flex justify-between text-green-700 mt-1 border-t pt-1"><span>{t('prepaidTaxesLabel')}</span> <span>- {money(totalPrepaidTaxes)}</span></div>}
                                         </div>
                                     </div>
@@ -2451,11 +2505,23 @@
                                                     {t('showBreakup', {toggle: showNewTaxBreakdown ? t('hide') : t('show')})}
                                                 </button>
                                             </span>
-                                            <span className="text-right whitespace-nowrap">{money(results.slabTaxNewVal)}</span>
+                                            <span className="text-right whitespace-nowrap">{money(results.slabTaxNewRaw)}</span>
                                         </div>
+                                        {results.rebate87A_New > 0 && (
+                                            <div className="text-sm flex justify-between items-start text-green-600">
+                                                <span>{t('rebate87ALabel')}</span>
+                                                <span className="whitespace-nowrap">- {money(results.rebate87A_New)}</span>
+                                            </div>
+                                        )}
+                                        {results.marginalRelief87A_New > 0 && (
+                                            <div className="text-sm flex justify-between items-start text-green-600">
+                                                <span>{t('marginalReliefRebateLabel')}</span>
+                                                <span className="whitespace-nowrap">- {money(results.marginalRelief87A_New)}</span>
+                                            </div>
+                                        )}
                                         {showNewTaxBreakdown && (
                                             <div className="my-2 p-2 bg-gray-50 rounded border text-xs text-gray-700 space-y-1">
-                                                {results.slabTaxNewBreakdown.length > 0 ? (
+                                                {results.slabTaxNewBreakdown && results.slabTaxNewBreakdown.length > 0 ? (
                                                     results.slabTaxNewBreakdown.map((slab, index) => (
                                                         <div key={index} className="flex justify-between items-start gap-2">
                                                             <span>{slab.range} {slab.rate && ` @ ${slab.rate}`}:</span>
@@ -2465,7 +2531,7 @@
                                                 ) : (
                                                     <p>{t('noSlabTax')}</p>
                                                 )}
-                                                {(results.slabTaxNewVal > 0 || results.slabTaxNewBreakdown.length > 1) && <hr className="my-1"/>}
+                                                {(results.slabTaxNewRaw > 0) && <hr className="my-1"/>}
                                                 <div className="font-bold flex justify-between">
                                                     <span>{t('totalSlabTax')}</span>
                                                     <span>{money(results.slabTaxNewVal)}</span>
@@ -2475,7 +2541,7 @@
                                         <div className="text-sm flex justify-between items-start"><span>{t('taxOnLTCG')}</span> <span className="whitespace-nowrap">{money(results.taxLtcgVal)}</span></div>
                                         <div className="text-sm flex justify-between items-start"><span>{t('taxOnSTCG')}</span> <span className="whitespace-nowrap">{money(results.taxStcgVal)}</span></div>
                                         <div className="text-sm flex justify-between items-start"><span>{t('taxOnCrypto')}</span> <span className="whitespace-nowrap">{money(results.taxOnCryptoVal)}</span></div>
-                                        <div className="font-semibold border-t pt-1 mt-1 flex justify-between"><span>{t('taxBeforeSurcharge')}</span> <span className="whitespace-nowrap">{money(results.slabTaxNewVal + results.capitalGainsTax + results.taxOnCryptoVal)}</span></div>
+                                        <div className="font-semibold border-t pt-1 mt-1 flex justify-between"><span>{t('taxBeforeSurcharge')}</span> <span className="whitespace-nowrap">{money(results.taxBeforeSurchargeNew)}</span></div>
                                         
                                         {results.surchargeNew > 0 && <div className="text-sm flex justify-between items-start"><span>{t('surchargeLabel', {rate: results.surchargeRateNew * 100})}</span> <span className="whitespace-nowrap">{money(results.surchargeNew)}</span></div>}
                                         {results.marginalReliefNew > 0 && <div className="text-sm flex justify-between items-start text-green-600"><span>{t('marginalReliefLabel')}</span> <span className="whitespace-nowrap">- {money(results.marginalReliefNew)}</span></div>}
@@ -2636,6 +2702,15 @@
                                                                 <span>{money(results.totalDeductionsNew)}</span>
                                                             </div>
                                                             <p className="text-xs text-gray-500 pl-2">{t('newRegimeOppsDeductionsIncludeNote')}</p>
+                                                             {results.marginalRelief87A_New > 0 && (
+                                                                <div className="flex justify-between font-bold text-green-700 border-t pt-1 mt-1">
+                                                                    <span className="flex items-center">
+                                                                        {t('newRegimeMarginalReliefLabel')}
+                                                                        <InfoTooltip title={t('newRegimeOppsMarginalReliefTooltip')} className="ml-2" />
+                                                                    </span>
+                                                                    <span>{money(results.marginalRelief87A_New)}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -2643,6 +2718,12 @@
                                                     <ul className="list-disc list-inside space-y-2 text-sm text-gray-800">
                                                         {results.standardDeductionAppliedNew > 0 && (
                                                             <li dangerouslySetInnerHTML={{ __html: t('newRegimeOppsStdDed', { amount: money(results.standardDeductionAppliedNew) })}} />
+                                                        )}
+                                                        {results.marginalRelief87A_New > 0 && (
+                                                            <li>
+                                                                <span dangerouslySetInnerHTML={{ __html: t('newRegimeOppsMarginalReliefBullet', { amount: money(results.marginalRelief87A_New) }) }} />
+                                                                <InfoTooltip title={t('newRegimeOppsMarginalReliefBulletTooltip')} className="ml-2" />
+                                                            </li>
                                                         )}
                                                         {results.npsEmployerApplied > 0 && (
                                                              <li dangerouslySetInnerHTML={{ __html: t('newRegimeOppsNPS', { amount: money(results.npsEmployerApplied) })}} />
