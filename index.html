@@ -367,8 +367,21 @@
             surchargeOldCol: "Surcharge (Old Regime)",
             surchargeNewCol: "Surcharge (New Regime)",
             surchargeNote: "The surcharge on tax payable on dividend income and certain capital gains is capped at 15%. This calculator applies the general slab rates for simplification.",
-            cryptoTaxSummaryTitle: "Summary of Crypto Taxation (TDS & Income Tax)",
-            toggleCryptoTdsTable: "{toggle} Details",
+            newRegimeReliefDemoTitle: "Marginal Relief Demonstration (New Regime, Rebate u/s 87A)",
+            newRegimeReliefDemoSubTitle: "Shows how tax liability is capped at the amount of income exceeding ₹12,00,000. For a salaried individual, the Standard Deduction of ₹75,000 is applied first.",
+            demoColGrossSalary: "Gross Salary (₹)",
+            demoColTaxableIncome: "Taxable Income (₹)",
+            demoColNormalTax: "Normal Slab Tax (₹)",
+            demoColExtraIncome: "Extra Income over ₹12L",
+            demoColTaxAfterRelief: "Tax after Relief (₹)",
+            demoColFinalTax: "Final Tax (with cess) (₹)",
+            demoColReliefApplied: "Relief Applied?",
+            demoRowFullRebate: "✅ Full rebate",
+            demoRowReliefYes: "✅",
+            demoRowReliefNo: "❌",
+            demoRowBreakEven: "❌ Break-even",
+            cryptoTaxSummaryTitle: "Crypto/VDA Taxation",
+            toggleCryptoTdsTable: "{toggle} TDS & Income Tax on Crypto",
             cryptoMergedTransactionCol: "Type of Transaction",
             cryptoMergedTdsCol: "TDS (u/s 194S)",
             cryptoMergedIncomeTaxCol: "Income Tax on Gains/Income",
@@ -2945,6 +2958,42 @@
                                         </div>
                                         <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-700">
                                             <p><strong className="font-semibold">{t('surchargeNotesTitle')}</strong> {t('surchargeNote')}</p>
+                                        </div>
+                                        
+                                        <div className="mt-6 pt-4 border-t">
+                                            <h4 className="text-lg font-semibold text-gray-800 mb-1">{t('newRegimeReliefDemoTitle')}</h4>
+                                            <p className="text-sm text-gray-600 mb-4">{t('newRegimeReliefDemoSubTitle')}</p>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full divide-y divide-gray-200 border">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColGrossSalary')}</th>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColTaxableIncome')}</th>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColNormalTax')}</th>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColExtraIncome')}</th>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColTaxAfterRelief')}</th>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColFinalTax')}</th>
+                                                            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('demoColReliefApplied')}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">12,00,000</td><td className="px-2 py-2 whitespace-nowrap">11,25,000</td><td className="px-2 py-2 whitespace-nowrap">52,500</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap font-bold">0</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowFullRebate')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">12,25,000</td><td className="px-2 py-2 whitespace-nowrap">11,50,000</td><td className="px-2 py-2 whitespace-nowrap">56,250</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap font-bold">0</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowFullRebate')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">12,50,000</td><td className="px-2 py-2 whitespace-nowrap">11,75,000</td><td className="px-2 py-2 whitespace-nowrap">60,000</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap font-bold">0</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowFullRebate')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">12,75,000</td><td className="px-2 py-2 whitespace-nowrap">12,00,000</td><td className="px-2 py-2 whitespace-nowrap">60,000</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap">0</td><td className="px-2 py-2 whitespace-nowrap font-bold">0</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowFullRebate')}</td></tr>
+                                                        <tr className="bg-blue-50"><td className="px-2 py-2 whitespace-nowrap">13,00,000</td><td className="px-2 py-2 whitespace-nowrap">12,25,000</td><td className="px-2 py-2 whitespace-nowrap">63,750</td><td className="px-2 py-2 whitespace-nowrap">25,000</td><td className="px-2 py-2 whitespace-nowrap">25,000</td><td className="px-2 py-2 whitespace-nowrap font-bold">26,000</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefYes')}</td></tr>
+                                                        <tr className="bg-blue-50"><td className="px-2 py-2 whitespace-nowrap">13,25,000</td><td className="px-2 py-2 whitespace-nowrap">12,50,000</td><td className="px-2 py-2 whitespace-nowrap">67,500</td><td className="px-2 py-2 whitespace-nowrap">50,000</td><td className="px-2 py-2 whitespace-nowrap">50,000</td><td className="px-2 py-2 whitespace-nowrap font-bold">52,000</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefYes')}</td></tr>
+                                                        <tr className="bg-yellow-50"><td className="px-2 py-2 whitespace-nowrap">13,45,588</td><td className="px-2 py-2 whitespace-nowrap">12,70,588</td><td className="px-2 py-2 whitespace-nowrap">70,588</td><td className="px-2 py-2 whitespace-nowrap">70,588</td><td className="px-2 py-2 whitespace-nowrap">70,588</td><td className="px-2 py-2 whitespace-nowrap font-bold">73,411</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowBreakEven')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">13,50,000</td><td className="px-2 py-2 whitespace-nowrap">12,75,000</td><td className="px-2 py-2 whitespace-nowrap">71,250</td><td className="px-2 py-2 whitespace-nowrap">75,000</td><td className="px-2 py-2 whitespace-nowrap">71,250</td><td className="px-2 py-2 whitespace-nowrap font-bold">74,100</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">13,75,000</td><td className="px-2 py-2 whitespace-nowrap">13,00,000</td><td className="px-2 py-2 whitespace-nowrap">75,000</td><td className="px-2 py-2 whitespace-nowrap">1,00,000</td><td className="px-2 py-2 whitespace-nowrap">75,000</td><td className="px-2 py-2 whitespace-nowrap font-bold">78,000</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">14,00,000</td><td className="px-2 py-2 whitespace-nowrap">13,25,000</td><td className="px-2 py-2 whitespace-nowrap">78,750</td><td className="px-2 py-2 whitespace-nowrap">1,25,000</td><td className="px-2 py-2 whitespace-nowrap">78,750</td><td className="px-2 py-2 whitespace-nowrap font-bold">81,900</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">14,25,000</td><td className="px-2 py-2 whitespace-nowrap">13,50,000</td><td className="px-2 py-2 whitespace-nowrap">82,500</td><td className="px-2 py-2 whitespace-nowrap">1,50,000</td><td className="px-2 py-2 whitespace-nowrap">82,500</td><td className="px-2 py-2 whitespace-nowrap font-bold">85,800</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">14,50,000</td><td className="px-2 py-2 whitespace-nowrap">13,75,000</td><td className="px-2 py-2 whitespace-nowrap">86,250</td><td className="px-2 py-2 whitespace-nowrap">1,75,000</td><td className="px-2 py-2 whitespace-nowrap">86,250</td><td className="px-2 py-2 whitespace-nowrap font-bold">89,700</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">14,75,000</td><td className="px-2 py-2 whitespace-nowrap">14,00,000</td><td className="px-2 py-2 whitespace-nowrap">90,000</td><td className="px-2 py-2 whitespace-nowrap">2,00,000</td><td className="px-2 py-2 whitespace-nowrap">90,000</td><td className="px-2 py-2 whitespace-nowrap font-bold">93,600</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                        <tr><td className="px-2 py-2 whitespace-nowrap">15,00,000</td><td className="px-2 py-2 whitespace-nowrap">14,25,000</td><td className="px-2 py-2 whitespace-nowrap">93,750</td><td className="px-2 py-2 whitespace-nowrap">2,25,000</td><td className="px-2 py-2 whitespace-nowrap">93,750</td><td className="px-2 py-2 whitespace-nowrap font-bold">97,500</td><td className="px-2 py-2 whitespace-nowrap">{t('demoRowReliefNo')}</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
